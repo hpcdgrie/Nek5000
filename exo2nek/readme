@@ -1,0 +1,14 @@
+exo2nek_h20_newsideset.f
+
+convert pure hex20 exodus file to nek .re2 file with new sideset algorithm.
+
+exo2nek_h20_moreoptions.f
+
+option 1: assume pure hex20 mesh, original exo2nek'
+option 2: assume hybrid tetra10 and wedge15 mesh'
+		  all tetra10 elements in block 1 (or first block)'
+		  all wedge15 elements in block 2 (or second block)'
+option 3: assume hybrid hex20, tetra10 and wedge15 mesh'
+          all tetra10 elements in block 1 (or first block)'
+          all hex20   elements in block 2 (or second block)'
+          all wedge15 elements in block 3 (or third block)'
