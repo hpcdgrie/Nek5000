@@ -1,0 +1,13 @@
+This case is a moving boundary projection example.
+
+This tube has a radius of 0.5, and centerline of x=0,y=0, with z from 0 to 5.0.
+
+this case provide two options for moving boundary projection.
+
+mvtube.usr: the tube geometry discription is hard coded.
+
+mbp_readstl.usr: it read stl files to take geometry information.
+
+the usage of mbp_readstl.usr is  in 
+
+readme_usage of mbp_readstl.usr

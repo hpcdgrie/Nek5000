@@ -1,0 +1,32 @@
+This document is prepared by Haomim Yuan, NSE division, Argonne National Lab. 6/26/2018
+
+This document describe the usage of moving boundary projectin technique using stl file.
+
+stl file contains triangles to discribe the geometry, 
+
+and could be exported from Solidworks, ICEM, and many other CAD softwares.
+
+Steps to use:
+
+1. export stl file from any CAD software. name it to stl_all.dat
+
+2. identify how many triangles in stl file. 
+if not known from stl file exportation from CAD software, number of triangles = (lines of stl file - 2)/7
+
+3. change the "ntr # total number of triangles"  in stl_split.py file to the number of triangles in stl file.
+and run stl_split.py to split stl_all.dat to stl_1.dat, stl_2.dat ....
+currently, we assume there are 10,000 triangles (npf in stl_split.py ) in stl_*.dat file.
+The reason we split stl_all.dat file, is because we need to read the content of stl file to each processor.
+And because the ram limitaion of processor, it is safer to split stl file.
+
+4. in mbp_readstl.usr, in getmvv(), change "nfiles" to the total number of stl_*.dat files.
+"ntr" is the number of triangles per stl_*.file, and "ntr" should be same with "npf" in stl_split.py
+
+5. in mbp_readstl.usr, in usrdat2(), change boundary condition according to sideset.
+Currently, we assume this mesh is converted from exodus file with sideset information. 
+it is assume sideset 1 for all walls that should not be moved.
+sideset 2 for walls that should slide accoding to moving wall.
+sideset 3 for all moving walls.
+
+6. in mbp_readstl.usr, line 318 to line 320, we use "(dble(param(11))*dt)" to determine the total physical time in this simulation.
+and mesh velocity is only calculated once at istep=0 in userchk(): "     if(istep.eq.0) call getmvv"

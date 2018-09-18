@@ -1,0 +1,830 @@
+c-----------------------------------------------------------------------
+c  nek5000 user-file template
+c
+c  user specified routines:
+c     - uservp  : variable properties
+c     - userf   : local acceleration term for fluid
+c     - userq   : local source term for scalars
+c     - userbc  : boundary conditions
+c     - useric  : initial conditions
+c     - userchk : general purpose routine for checking errors etc.
+c     - userqtl : thermal divergence for lowMach number flows 
+c     - usrdat  : modify element vertices 
+c     - usrdat2 : modify mesh coordinates
+c     - usrdat3 : general purpose routine for initialization
+c     
+c-----------------------------------------------------------------------
+c moving boundary projection.(mbp_realstl.usr)
+c 
+c read stl file.
+c should use stl_split.py to split stl_all.dat first.
+c
+cc
+c----------------------------------------------------------------------
+      subroutine uservp(ix,iy,iz,eg) ! set variable properties
+
+c      implicit none
+
+      integer ix,iy,iz,eg
+     
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e
+c     e = gllel(eg)
+
+      udiff  = 0.0
+      utrans = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userf(ix,iy,iz,eg) ! set acceleration term
+c
+c     Note: this is an acceleration term, NOT a force!
+c     Thus, ffx will subsequently be multiplied by rho(x,t).
+c
+c      implicit none
+
+      integer ix,iy,iz,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e
+c     e = gllel(eg)
+
+      ffx = 0.0
+      ffy = 0.0
+      ffz = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userq(ix,iy,iz,eg) ! set source term
+
+c      implicit none
+
+      integer ix,iy,iz,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e
+c     e = gllel(eg)
+
+      qvol   = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userbc(ix,iy,iz,iside,eg) ! set up boundary conditions
+c
+c     NOTE ::: This subroutine MAY NOT be called by every process
+c
+c      implicit none
+
+      integer ix,iy,iz,iside,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+      integer e
+      e = gllel(eg)
+
+c      if (cbc(iside,gllel(eg),ifield).eq.'v01')
+
+      ux   = 0.0
+      uy   = 0.0
+      uz   = 0.0
+      temp = 0.0
+C      if (cbc(iside,e,1).eq.'mv ') ux = 0.5/100.0
+     
+     
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine useric(ix,iy,iz,eg) ! set up initial conditions
+
+c      implicit none
+
+      integer ix,iy,iz,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      ux   = 0.0
+      uy   = 0.0
+      uz   = 0.0
+      temp = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userchk()
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+
+cc calculate moving boundary velocity at istep = 0
+      if(istep.eq.0) call getmvv
+      
+cc move mesh at all timestep
+	  call my_mv_mesh
+
+cc generate new mesh re2 at the end of simulation.
+      if(istep.eq.nsteps) call gen_re2(2)	  
+
+cc dump clf number field for debug
+      if (mod(istep,iostep).eq.0) then
+      call compute_cfl(cfl,vx,vy,vz,dt)
+      call outpost(cflf,cflf,cflf,cflf,cflf,'cfl')
+      endif	 
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userqtl ! Set thermal divergence
+
+      call userqtl_scig 
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat()   ! This routine to modify element vertices
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat2()  ! This routine to modify mesh coordinates
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+      integer iel,ifc,id_face
+      common /usr_bound/ cbc_usr(6,lelt)
+      character*3 cbc_usr
+
+cc assume your mesh is converted from exo2nek, with sidessets.
+cc this is for general usage.
+cc 	  do iel=1,nelv
+cc        do ifc=1,2*ndim
+cc          id_face = bc(5,ifc,iel,1)
+cc          if (id_face.eq.1) then       ! SideSet 1 for all walls
+cc             cbc(ifc,iel,1) = 'W  '
+cc             cbc_usr(ifc,iel) = 'W  '
+cc          elseif (id_face.eq.2) then   ! SideSet 2 for all walls that should slide. such as tube end.
+cc             cbc(ifc,iel,1) = 'W  '
+cc             cbc_usr(ifc,iel) = 'W1 '
+cc          elseif (id_face.eq.3) then   ! SideSet 3 for all walls that should be moved.
+cc             cbc(ifc,iel,1) = 'mv '
+cc             cbc_usr(ifc,iel) = 'mv '
+cc          endif
+cc        enddo
+cc      enddo
+	
+	
+cc this part is specific for mvtube case.
+      do iel=1,nelv
+        do ifc=1,2*ndim
+          id_face = bc(5,ifc,iel,1)
+          if (id_face.eq.1) then       ! SideSet 1 walls that should slide. such as tube end.
+             cbc(ifc,iel,1) = 'W  '
+             cbc_usr(ifc,iel) = 'W1 '
+          elseif (id_face.eq.2) then   ! SideSet 2 walls that should slide. such as tube end.
+             cbc(ifc,iel,1) = 'W  '
+             cbc_usr(ifc,iel) = 'W1 '
+          elseif (id_face.eq.3) then   ! SideSet 3 
+             cbc(ifc,iel,1) = 'W  '
+             cbc_usr(ifc,iel) = 'W  '
+          elseif (id_face.eq.4) then   ! SideSet 4 tube surface
+             cbc(ifc,iel,1) = 'mv '
+             cbc_usr(ifc,iel) = 'mv '
+          endif
+        enddo
+      enddo
+	  
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat3()
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c----------------------------------------------------------------------
+c----------------------------------------------------------------------
+      subroutine getmvv
+cc get moving velocity of moving surface.
+      include 'SIZE'
+      include 'TOTAL'
+      common /usr_umesh/ umeshx(lx1,ly1,lz1,lelt),
+     & umeshy(lx1,ly1,lz1,lelt),
+     & umeshz(lx1,ly1,lz1,lelt)
+	 
+      parameter(ntr=10000,nfiles=1)          ! number of triangles in .stl file, and number of stl files
+      real*8 ver(ntr,3,3)                    ! vetex coordinate
+      real*8 cen(ntr,3)                      ! center of the triangle
+      real*8 nvec(ntr,3)                     ! normal vector of this triangle
+      real*8 gvec(3)                         ! normal vector of this grid point
+      real*8 prjxyz(3)
+
+      real*8 prjdist(lx1,ly1,lz1,lelt)
+
+      real*8 length
+      character*20 ffname
+      integer fileid
+      logical iffindtri
+      integer io,itr,maxitr
+      logical ifproject
+	
+	  
+      integer iel,ifc,id_face
+      real*8 xx,yy,zz
+      real*8 mvxx,mvyy,mvzz
+
+      ntot = nx1*ny1*nz1*nelv
+	  
+      call rzero(umeshx,ntot)
+      call rzero(umeshy,ntot)
+      call rzero(umeshz,ntot)
+
+      do i =1,ntot
+        prjdist(i,1,1,1) = 1000.0  ! initial max projection distance, this used to find the closest triangle.
+      enddo
+	  
+      do ifile = 1,nfiles
+
+      if(nid.eq.0) write(6,*) "read stl file: ", ifile
+
+      if(ifile.lt.10) write(ffname,20) ifile
+      if((ifile.ge.10).and.(ifile.lt.100)) write(ffname,21) ifile
+      if(ifile.ge.100) write(ffname,22) ifile
+
+   20 format('stl_',I1,'.dat')
+   21 format('stl_',I2,'.dat') 
+   22 format('stl_',I3,'.dat') 
+
+      if(nid.eq.0) write(6,*) ffname
+      fileid = 299
+      open(fileid,file=ffname)
+      if(nid.eq.0) write(6,*) "open file ok"	  
+
+      do itr = 1,ntr
+c read normal vector first
+      read(fileid,*,iostat=io) nvec(itr,1),nvec(itr,2),nvec(itr,3)
+ 
+c if not file end.  continue reading. 
+      if(io.eq.0) then
+	  
+      maxitr = itr ! maxitr is the number of triagnle in tis stl file.
+                   ! this is to read the correct number of trianlge at the last file.
+
+      length = sqrt(nvec(itr,1)**2 + nvec(itr,2)**2 + nvec(itr,3)**2)
+      nvec(itr,1) = nvec(itr,1)/length
+      nvec(itr,2) = nvec(itr,2)/length
+      nvec(itr,3) = nvec(itr,3)/length
+
+      read(fileid,*) ver(itr,1,1),ver(itr,1,2),ver(itr,1,3)
+      read(fileid,*) ver(itr,2,1),ver(itr,2,2),ver(itr,2,3)
+      read(fileid,*) ver(itr,3,1),ver(itr,3,2),ver(itr,3,3)
+	  
+      cen(itr,1) = (ver(itr,1,1)+ver(itr,2,1)+ver(itr,3,1))/3.0
+      cen(itr,2) = (ver(itr,1,2)+ver(itr,2,2)+ver(itr,3,2))/3.0
+      cen(itr,3) = (ver(itr,1,3)+ver(itr,2,3)+ver(itr,3,3))/3.0	  
+	
+	  else if(io.lt.0) then
+c end of file reached
+      exit
+      else if(io.gt.0) then
+c error reading feading file
+      write(6,*) "ERROR reading file for nid: ", nid
+      write(6,*) "for file :", ifile
+      endif
+
+      enddo
+      close(fileid)
+
+      if(nid.eq.0) write(6,*) "DONE: read STL file: ", ifile
+	  if(nid.eq.1000) write(6,*) "DONE: nid=1000,maxitr is ", maxitr
+
+	  
+c project boundary to the triangles in stl file
+	  
+      ifproject = .true.
+      iffindtri = .false.
+	  
+      if(ifproject) then
+	  
+      do iel=1,nelv
+      do ifc=1,2*ndim
+      if (cbc(ifc,iel,1).eq.'mv ') then     ! if this surface is moving,
+                                            ! try to find the closest projected triangle.
+            call facind(i0,i1,j0,j1,k0,k1,nx1,ny1,nz1,ifc)
+            do k=k0,k1
+            do j=j0,j1
+            do i=i0,i1
+               xx = xm1(i,j,k,iel)
+               yy = ym1(i,j,k,iel)
+               zz = zm1(i,j,k,iel)
+
+               call getnormal(i,j,k,ifc,iel,gvec) ! get normal vector of this surface of this element.
+
+	           iffindtri = .false.
+
+                 ! loop over all triangles to find the closest projected triagnle.
+               call find_tri(xx,yy,zz,gvec,ver,cen,nvec,ntr,maxitr,
+     &prjxyz,prjdist(i,j,k,iel),iffindtri)
+ 
+               if(iffindtri) then
+               umeshx(i,j,k,iel) = (prjxyz(1) - xx)/(dble(param(11))*dt)
+               umeshy(i,j,k,iel) = (prjxyz(2) - yy)/(dble(param(11))*dt)
+               umeshz(i,j,k,iel) = (prjxyz(3) - zz)/(dble(param(11))*dt)
+               endif
+
+            enddo
+            enddo
+            enddo
+      endif
+      enddo
+      enddo
+
+      endif ! endif projection
+
+      enddo  ! do ifile = 1,nfiles
+
+      pmax=glmax(umeshx,ntot)  
+      pmin=glmin(umeshx,ntot)
+      if (nid.eq.0) write(6,*) "umeshx: ",pmin," - ",pmax
+     
+      pmax=glmax(umeshy,ntot)  
+      pmin=glmin(umeshy,ntot)
+      if (nid.eq.0) write(6,*) "umeshy: ",pmin," - ",pmax
+    
+      pmax=glmax(umeshz,ntot)  
+      pmin=glmin(umeshz,ntot)
+      if (nid.eq.0) write(6,*) "umeshz: ",pmin," - ",pmax
+
+      return
+      end
+c----------------------------------------------------------------------
+      subroutine getnormal(i,j,k,f,e,gvec)
+cc calculate normal vector of this grid point.
+cc assume this grid point is on one face
+      include 'SIZE'
+      include 'TOTAL'  
+      integer i,j,k,f,e
+	  real*8 gvec(3), length  
+
+	  if (f.eq.1) then
+	  gvec(1) = xm1(i,ly1,k,e) - xm1(i,j,k,e)
+      gvec(2) = ym1(i,ly1,k,e) - ym1(i,j,k,e)
+      gvec(3) = zm1(i,ly1,k,e) - zm1(i,j,k,e)
+      elseif(f.eq.2) then
+	  gvec(1) = xm1(1,j,k,e) - xm1(i,j,k,e)
+      gvec(2) = ym1(1,j,k,e) - ym1(i,j,k,e)
+      gvec(3) = zm1(1,j,k,e) - zm1(i,j,k,e)
+      elseif(f.eq.3) then
+	  gvec(1) = xm1(i,1,k,e) - xm1(i,j,k,e)
+      gvec(2) = ym1(i,1,k,e) - ym1(i,j,k,e)
+      gvec(3) = zm1(i,1,k,e) - zm1(i,j,k,e)
+      elseif(f.eq.4) then
+	  gvec(1) = xm1(lx1,j,k,e) - xm1(i,j,k,e)
+      gvec(2) = ym1(lx1,j,k,e) - ym1(i,j,k,e)
+      gvec(3) = zm1(lx1,j,k,e) - zm1(i,j,k,e)
+      elseif(f.eq.5) then
+	  gvec(1) = xm1(i,j,lz1,e) - xm1(i,j,k,e)
+      gvec(2) = ym1(i,j,lz1,e) - ym1(i,j,k,e)
+      gvec(3) = zm1(i,j,lz1,e) - zm1(i,j,k,e)
+      elseif(f.eq.6) then
+	  gvec(1) = xm1(i,j,1,e) - xm1(i,j,k,e)
+      gvec(2) = ym1(i,j,1,e) - ym1(i,j,k,e)
+      gvec(3) = zm1(i,j,1,e) - zm1(i,j,k,e)
+      endif
+	  
+      length = sqrt(gvec(1)**2 + gvec(2)**2 + gvec(3)**2)
+      gvec(1) = gvec(1)/length
+      gvec(2) = gvec(2)/length
+      gvec(3) = gvec(3)/length  
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine find_tri(xx1,yy1,zz1,gvec,ver,cen,nvec,ntr,maxitr,
+     &cloeset_prjxyz,max_proj_dis,iffindtri)
+      include 'SIZE'
+      include 'TOTAL'
+	  
+      real*8 xx1,yy1,zz1
+
+      real*8 ver(ntr,3,3)                    ! vetex of this triangle
+      real*8 cen(ntr,3)
+      real*8 nvec(ntr,3)                     ! normal vector of this triangle
+      real*8 gvec(3)                         ! element grid point vector
+      real*8 prjxyz(3),cloeset_prjxyz(3)
+      real*8 AB_v(3),AC_v(3),PA_v(3),PB_v(3),PC_v(3),prod_v(3)
+      real*8 AP_v(3)
+      real*8 max_proj_dis,proj_dis
+      integer iter,cloeset_iter,maxitr
+      real*8 alpha_1,beta_1,gamma_1
+      real*8 A_tri,A_tri1,A_tri2
+      real*8 angle,cosangle,RHS
+
+      logical usenewmethod
+	  
+      logical iffindtri
+	  
+      usenewmethod = .true. ! if use new method
+	  
+cc      max_proj_dis = 60.0  ! maximum projection distance
+      pi = 3.1415926
+
+      iffindtri = .false.
+	  
+c loop over all triangle to find the projected triangle
+      do iter = 1,maxitr
+
+      cosangle = gvec(1)*nvec(iter,1)+gvec(2)*nvec(iter,2)
+     &+gvec(3)*nvec(iter,3)  ! calculate the angle between triangle normal vector and element normal vector
+      angle = acos(cosangle)
+
+      ! the angle should  close to zero or 180 degree
+      if((angle.lt.(pi*0.2)).or.(angle.gt.(pi*0.8))) then
+
+c find the projected point coordinates on triangle
+c pionts on line
+c x = xx1 + gvec(1)*t
+c y = yy1 + gvec(2)*t
+c z = zz1 + gvec(3)*t
+c when it on triangle
+c (x - cen(cloeset_iter,1))*nvec(cloeset_iter,1)+
+c (y - cen(cloeset_iter,2))*nvec(cloeset_iter,2)+
+c (z - cen(cloeset_iter,3))*nvec(cloeset_iter,3) should be 0
+c calculate t
+
+      RHS = (cen(iter,1)-xx1)*nvec(iter,1)+
+     & (cen(iter,2)-yy1)*nvec(iter,2)+
+     & (cen(iter,3)-zz1)*nvec(iter,3)
+
+      RHS = RHS/(gvec(1)*nvec(iter,1)+
+     & gvec(2)*nvec(iter,2)+
+     & gvec(3)*nvec(iter,3))
+
+      prjxyz(1) =  xx1 + gvec(1)*RHS
+      prjxyz(2) =  yy1 + gvec(2)*RHS
+      prjxyz(3) =  zz1 + gvec(3)*RHS
+
+      proj_dis = sqrt((prjxyz(1)-xx1)**2 +(prjxyz(2)-yy1)**2 
+     &+(prjxyz(3)-zz1)**2)
+	 
+      if(proj_dis.lt.max_proj_dis) then
+cc     if  proj_dis is smaller then max_proj_dis ()
+c     
+c now need to jude if the projected point is inside the triangle.
+
+c use new method, 
+      if (usenewmethod) then
+
+      AB_v(1) = (ver(iter,2,1) -ver(iter,1,1))
+      AB_v(2) = (ver(iter,2,2) -ver(iter,1,2))
+      AB_v(3) = (ver(iter,2,3) -ver(iter,1,3))
+	  
+      AC_v(1) = (ver(iter,3,1) -ver(iter,1,1))
+      AC_v(2) = (ver(iter,3,2) -ver(iter,1,2))
+      AC_v(3) = (ver(iter,3,3) -ver(iter,1,3))
+
+
+      AP_v(1) = (prjxyz(1) - ver(iter,1,1))
+      AP_v(2) = (prjxyz(2) - ver(iter,1,2))
+      AP_v(3) = (prjxyz(3) - ver(iter,1,3))	  
+
+      alpha_1 =  (AP_v(1)  - AP_v(2)*AC_v(1)/AC_v(2))
+     &/( AB_v(1) -(AC_v(1)*AB_v(2))/AC_v(2))
+
+      beta_1 = (AP_v(2)  - alpha_1*AB_v(2))/AC_v(2)
+
+      if((alpha_1.ge.0.0).and.(alpha_1.le.1.0)) then
+      if((beta_1.ge.0.0).and.(beta_1.le.1.0)) then
+      if(((alpha_1+beta_1).ge.0.0)
+     &.and.((alpha_1+beta_1).le.1.0)) then
+
+c the projected point is inside the triangle.
+        cloeset_iter = iter
+        max_proj_dis = proj_dis
+        cloeset_prjxyz(1) = prjxyz(1)
+        cloeset_prjxyz(2) = prjxyz(2)
+        cloeset_prjxyz(3) = prjxyz(3)
+        iffindtri =.true.				
+      endif
+      endif
+      endif
+
+c use old method, this method has some problems when trying to 
+c apply to the experimetnal geometry for CHSG case.
+      else ! use old method 
+c use by barycentric coordinates
+c https://math.stackexchange.com/questions/4322/check-whether-a-point-is-within-a-3d-triangle
+c 1. calulate the area of this 
+      AB_v(1) = (ver(iter,2,1) -ver(iter,1,1))
+      AB_v(2) = (ver(iter,2,2) -ver(iter,1,2))
+      AB_v(3) = (ver(iter,2,3) -ver(iter,1,3))
+	  
+      AC_v(1) = (ver(iter,3,1) -ver(iter,1,1))
+      AC_v(2) = (ver(iter,3,2) -ver(iter,1,2))
+      AC_v(3) = (ver(iter,3,3) -ver(iter,1,3))
+	  
+      PA_v(1) = (ver(iter,1,1) -prjxyz(1))
+      PA_v(2) = (ver(iter,1,2) -prjxyz(2))
+      PA_v(3) = (ver(iter,1,3) -prjxyz(3))
+	  
+      PB_v(1) = (ver(iter,2,1) -prjxyz(1))
+      PB_v(2) = (ver(iter,2,2) -prjxyz(2))
+      PB_v(3) = (ver(iter,2,3) -prjxyz(3))
+
+      PC_v(1) = (ver(iter,3,1) -prjxyz(1))
+      PC_v(2) = (ver(iter,3,2) -prjxyz(2))
+      PC_v(3) = (ver(iter,3,3) -prjxyz(3))
+	  
+      call cross_product(AB_v,AC_v,prod_v,A_tri)
+      call cross_product(PB_v,PC_v,prod_v,A_tri1)
+      call cross_product(PC_v,PA_v,prod_v,A_tri2)
+  
+      alpha_1 = A_tri1/A_tri
+      beta_1 = A_tri2/A_tri
+      gamma_1 = 1.0 - alpha_1 - beta_1
+      if((alpha_1.ge.0.0).and.(alpha_1.le.1.0)) then
+      if((beta_1.ge.0.0).and.(beta_1.le.1.0)) then
+      if((gamma_1.ge.0.0).and.(gamma_1.le.1.0)) then
+c the projected point is inside the triangle.
+        cloeset_iter = iter
+        max_proj_dis = proj_dis
+        cloeset_prjxyz(1) = prjxyz(1)
+        cloeset_prjxyz(2) = prjxyz(2)
+        cloeset_prjxyz(3) = prjxyz(3)
+        iffindtri =.true.
+      endif
+      endif
+      endif
+
+      endif ! if  (usenewmethod) then
+
+      endif  ! if(proj_dis.le.max_proj_dis)
+
+      endif  ! for angle check
+
+      enddo
+
+      return
+      end
+c----------------------------------------------------------------------------------------
+c-----------------------------------------------------------------------
+      subroutine cross_product(AB_v,AC_v,prod_v,area)
+cc calculate cross product of two vectors
+
+      real*8 AB_v(3),AC_v(3),prod_v(3)
+      real*8 area
+
+      prod_v(1) = AB_v(2)*AC_v(3)-AB_v(3)*AC_v(2)
+      prod_v(2) = AB_v(3)*AC_v(1)-AB_v(1)*AC_v(3)
+      prod_v(3) = AB_v(1)*AC_v(2)-AB_v(2)*AC_v(1)
+	  
+      area = prod_v(1)**2 + prod_v(2)**2+prod_v(3)**2
+      area = sqrt(area)
+      area = area/2.0
+	  
+      return 
+      end
+c------------------------------------------------------------------------------------------
+      subroutine my_mv_mesh
+cc this subroutine calculate the actual mesh moving velocity wx/y/z
+cc from umeshx/y/z.
+cc
+      include 'SIZE'
+      include 'TOTAL'
+      common /usr_umesh/ umeshx(lx1,ly1,lz1,lelt),
+     & umeshy(lx1,ly1,lz1,lelt),
+     & umeshz(lx1,ly1,lz1,lelt)
+      parameter (lt = lx1*ly1*lz1*lelt)
+      common /mrthoi/ napprx(2),nappry(2),napprz(2)
+      common /mrthov/ apprx(lt,0:mxprev)
+     $              , appry(lt,0:mxprev)
+     $              , apprz(lt,0:mxprev)
+      common /mstuff/ d(lt),h1(lt),h2(lt),mask(lt)
+      common /usr_bound/ cbc_usr(6,lelt)
+      character*3 cbc_usr
+      real mask,pmax,pmin
+      real srfbl,volbl,delta,deltap1,deltap2,arg1,arg2
+      real zero,one
+      integer e,f
+      integer icalld
+      save    icalld
+      data    icalld /0/
+
+      n = nx1*ny1*nz1*nelv
+      nface = 2*ndim
+
+      if (icalld.eq.0) then
+         icalld=1
+         napprx(1)=0
+         nappry(1)=0
+         napprz(1)=0
+         nxz   = nx1*nz1
+         nxyz  = nx1*ny1*nz1
+         srfbl = 0.   ! Surface area of elements in b.l.
+         volbl = 0.   ! Volume of elements in boundary layer
+         do e=1,nelv
+         do f=1,nface
+            if (cbc_usr(f,e).eq.'mv ') then
+               srfbl = srfbl + vlsum(area(1,1,f,e),nxz )
+               volbl = volbl + vlsum(bm1 (1,1,1,e),nxyz)
+            endif
+         enddo
+         enddo
+         srfbl = glsum(srfbl,1)  ! Sum over all processors
+         volbl = glsum(volbl,1)
+         delta = volbl / srfbl   ! Avg thickness of b.l. elements
+c        delta = 0.02            ! 1/2 separation of cylinders
+         call rone (h1,n)
+         call rzero(h2,n)
+
+         call cheap_dist(d,1,'mv ')
+cc distf()
+
+         if (nid.eq.0) write(6,*) "delta: ",delta
+         deltap1 = 2.0*delta  ! Protected b.l. thickness
+         deltap2 = 4.0*delta
+cc explanation of deltap1 and deltap2.
+cc deltap1 and deltap2 are used to help the decaying function
+cc if deltap1,deltap2 get larger, then mesh far from face is geting moved.
+cc if deltap1,deltap2 get smaller, then mesh on face is more moved.
+ 
+         do i=1,n
+            arg1   = -(d(i)/deltap1)**2
+            arg2   = -(d(i)/deltap2)**2
+            h1(i)  = h1(i) + 1000.0*exp(arg1) + 10.0*exp(arg2)
+         enddo
+
+         call rone(mask,n)
+         do e=1,nelv
+         do f=1,nface
+           zero = 0.
+           one  = 1.
+         if(cbc_usr(f,e).eq.'W  ')call facev(mask,e,f,zero,nx1,ny1,nz1)
+         if(cbc_usr(f,e).eq.'W1 ')call facev(mask,e,f,one,nx1,ny1,nz1)    !! for sliding walls.
+         if(cbc_usr(f,e).eq.'v  ')call facev(mask,e,f,zero,nx1,ny1,nz1)
+         if(cbc_usr(f,e).eq.'mv ')call facev(mask,e,f,zero,nx1,ny1,nz1)
+         if(cbc_usr(f,e).eq.'O  ')call facev(mask,e,f,zero,nx1,ny1,nz1)
+         enddo
+         enddo
+         call dsop(mask,'*  ',nx1,ny1,nz1)    ! dsop mask
+         call opzero(wx,wy,wz)
+c        call outpost(w1mask,w2mask,w3mask,mask,mask,'msk')
+c        call exitti('QUIT MASK$',nx1)
+
+      endif
+     
+cc      if (nid.eq.0) write(6,*) "delta: ",delta
+
+      do e=1,nelv
+      do f=1,nface
+         if (cbc_usr(f,e).eq.'mv ') then
+           call facec(wx,umeshx,e,f,nx1,ny1,nz1,nelv)
+           call facec(wy,umeshy,e,f,nx1,ny1,nz1,nelv)
+           call facec(wz,umeshz,e,f,nx1,ny1,nz1,nelv)
+         endif
+      enddo
+      enddo
+      tol = -1.e-3
+
+      utx_usr=glamax(umeshx,n)
+      uty_usr=glamax(umeshy,n)  
+      utz_usr=glamax(umeshz,n)
+
+      if (nid.eq.0) write(6,*) "utx_usr: ",utx_usr
+      if (nid.eq.0) write(6,*) "uty_usr: ",uty_usr
+      if (nid.eq.0) write(6,*) "utz_usr: ",utz_usr
+     
+      if (utx_usr.gt.1e-8)
+     & call laplaceh('mshx',wx,h1,h2,mask,vmult,1,tol,
+     & 500,apprx,napprx)
+      if (uty_usr.gt.1e-8) 
+     & call laplaceh('mshy',wy,h1,h2,mask,vmult,1,tol,
+     & 500,appry,nappry)
+      if (utz_usr.gt.1e-8)
+     & call laplaceh('mshz',wz,h1,h2,mask,vmult,1,tol,
+     & 500,apprz,napprz)
+
+      ifxyo=.true.
+      if (mod(istep,iostep).eq.0) call outpost(wx,wy,wz,h1,h1,'mvv')
+      if (mod(istep,iostep).eq.0) then
+      call outpost(umeshx,umeshy,umeshz,h1,h1,'mv2')
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine laplaceh
+     $     (name,u,h1,h2,mask,mult,ifld,tli,maxi,approx,napprox)
+c
+c     Solve Laplace's equation, with projection onto previous solutions.
+c
+c     Boundary condition strategy:
+c
+c     u = u0 + ub
+c
+c        u0 = 0 on Dirichlet boundaries
+c        ub = u on Dirichlet boundaries
+c
+c        _
+c        A ( u0 + ub ) = 0
+c
+c        _            _
+c        A  u0  =   - A ub
+c
+c        _             _
+c       MAM u0  =   -M A ub,    M is the mask
+c
+c                      _
+c        A  u0  =   -M A ub ,  Helmholtz solve with SPD matrix A
+c
+c        u = u0+ub
+c
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CTIMER'
+c
+      character*4 name
+      real u(1),h1(1),h2(1),mask(1),mult(1),approx (1)
+      integer   napprox(1)
+
+      parameter (lt=lx1*ly1*lz1*lelt)
+      common /scruz/ r (lt),ub(lt)
+
+      logical ifstdh
+      character*4  cname
+      character*6  name6
+
+      logical ifwt,ifvec
+
+      call chcopy(cname,name,4)
+      call capit (cname,4)
+
+      call blank (name6,6)
+      call chcopy(name6,name,4)
+      ifwt  = .true.
+      ifvec = .false.
+      isd   = 1
+      imsh  = 1
+      nel   = nelfld(ifld)
+
+      n = nx1*ny1*nz1*nel
+
+      call copy (ub,u,n)             ! ub = u on boundary
+      call dsavg(ub)                 ! Make certain ub is in H1
+                                     !     _
+      call axhelm (r,ub,h1,h2,1,1)   ! r = A*ub
+
+      do i=1,n                       !        _
+         r(i)=-r(i)*mask(i)          ! r = -M*A*ub
+      enddo
+
+      call dssum  (r,nx1,ny1,nz1)    ! dssum rhs
+
+      call project1
+     $    (r,n,approx,napprox,h1,h2,mask,mult,ifwt,ifvec,name6)
+
+      tol = abs(tli)
+      p22=param(22)
+      param(22)=abs(tol)
+      if (nel.eq.nelv) then
+        call hmhzpf (name,u,r,h1,h2,mask,mult,imsh,tol,maxi,isd,binvm1)
+      else
+        call hmhzpf (name,u,r,h1,h2,mask,mult,imsh,tol,maxi,isd,bintm1)
+      endif
+      param(22)=p22
+
+      call project2
+     $     (u,n,approx,napprox,h1,h2,mask,mult,ifwt,ifvec,name6)
+
+      call add2(u,ub,n)
+
+      return
+      end
+C=======================================================================
