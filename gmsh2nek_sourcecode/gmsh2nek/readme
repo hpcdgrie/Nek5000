@@ -1,0 +1,23 @@
+gmsh2nek
+convert gmsh .msh to nek .re2 file
+Haomin Yuan, 9/17/2018.
+
+notes about usage
+1. for volume elements, only hex20/hex27 elements. 
+Physical tags are needed for volume elements to be dumped out by gmsh
+2. for surface elements, quad8/quad9 are need to assign boudaries/boundary condition. 
+Physical tags are needed for all surface elements to be dumped out by gmsh
+3. For converted mesh, boundary conditions are actually set in nek .usr file
+      do iel=1,nelv
+      do ifc=1,2*ndim
+        id_face = bc(5,ifc,iel,1)
+        if (id_face.eq.1) then
+           cbc(ifc,iel,1) = 'v  '
+        elseif (id_face.eq.2) then
+           cbc(ifc,iel,1) = 'O  '
+        elseif (id_face.eq.3) then 
+           cbc(ifc,iel,1) = 'W  '
+        endif
+      enddo
+      enddo
+id_face is the physical tags assigned to surface elements.

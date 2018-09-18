@@ -1,0 +1,54 @@
+c
+c GLOBAL sizing parameters:
+c
+      parameter (ldim = 3)                     ! max number of dimensions (2D/3D)
+      parameter (max_num_elem     = MAXNEL)
+
+c=======================================================================================
+c
+c
+c EXODUS related variables:
+c
+      character*32  mshname     ! MXSTLN=32 max string length in an exodus file
+ 
+      integer totalNode,totalQuad,totalHex,totalElem
+      integer num_dim,num_elem
+ 
+      real    node_xyz(3,max_num_elem)         ! node coordinates xyz
+      integer quad_array(11,max_num_elem)   ! 1, physical entity, 2, geometrical entity, 3-11, quad9 nodes number
+      integer hex_array(29,max_num_elem)     ! 1, physical entity, 2, geometrical entity, 3-29, hex27 nodes number
+      integer hex_face_array(6,max_num_elem) ! 1-6, face pointer to quad number, if 0, not quad is assosiate to this face
+c
+c
+c NEK CORE variables:
+c
+      real   xm1   (3,3,3,max_num_elem)
+      real   ym1   (3,3,3,max_num_elem) 
+      real   zm1   (3,3,3,max_num_elem)
+      real   bc    (5,2*ldim,max_num_elem)
+      real   curve (2*ldim,12,max_num_elem) 
+
+      character*1  ccurve ((4+8*(ldim-2)),max_num_elem)
+      character*3  cbc    (2*ldim,max_num_elem)
+c
+c
+c .RE2 file related variables
+c
+      character*80   re2name
+c
+c
+c     Input common block structure:
+c
+c     INPUT1:  INTEGER      
+c     INPUT2:  REAL*8 
+c     INPUT3:  REAL*8
+c     INPUT4:  CHARACTER
+c
+      common /INPUT1/ totalNode,totalQuad,totalHex,totalElem,
+     &                num_dim,num_elem
+
+      common /INPUT2/ quad_array,hex_array,hex_face_array
+
+      common /INPUT3/ bc, curve, node_xyz,xm1,ym1,zm1
+
+      common /INPUT4/ cbc, ccurve, mshname, re2name
