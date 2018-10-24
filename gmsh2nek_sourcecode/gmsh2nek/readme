@@ -7,20 +7,24 @@ notes about usage
 1. for volume elements, only hex20/hex27 elements. 
 Physical tags are needed for volume elements to be dumped out by gmsh
 2. for surface elements, quad8/quad9 are need to assign boudaries/boundary condition. 
-Physical tags are needed for all surface elements to be dumped out by gmsh
+Physical tags (surface number) are needed for all surface elements to be dumped out by gmsh
 3. For converted mesh, boundary conditions are actually set in nek .usr file
+
+Please in include the following subroutines in usrdat2()
+
       do iel=1,nelv
       do ifc=1,2*ndim
         id_face = bc(5,ifc,iel,1)
-        if (id_face.eq.1) then
+        if (id_face.eq.1) then        ! surface 1 for inlet 
            cbc(ifc,iel,1) = 'v  '
-        elseif (id_face.eq.2) then
+        elseif (id_face.eq.2) then    ! surface 2 for outlet
            cbc(ifc,iel,1) = 'O  '
-        elseif (id_face.eq.3) then 
+        elseif (id_face.eq.3) then    ! surface 3 for wall
            cbc(ifc,iel,1) = 'W  '
         endif
       enddo
       enddo
+
 id_face is the physical tags assigned to surface elements.
 
 4. You could also include a .bc file to direct assign boundary when doing gmsh2nek conversion
