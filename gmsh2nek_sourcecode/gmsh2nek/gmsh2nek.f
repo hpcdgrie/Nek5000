@@ -1,5 +1,10 @@
 c gmsh2nek
 c convert gmsh .msh file (version 2, ascii format) to re2 file
+c 
+c trying to add periodicity setting when doing mesh converting.
+c and set boundary condition direct in 
+c casename.bc 
+c Haomin Yuan. 9/24/18
 c-----------------------------------------------------------------------
       program gmsh2nek
 #     include "SIZE"
@@ -7,6 +12,7 @@ c-----------------------------------------------------------------------
       call read_input_name  ! read input name
       call gmsh_read        ! read gmsh .msh file (nodes,quads,hexes)
       call convert          ! convert gmsh hex20 to nek hex20
+      call setbc            ! set boundary condition
       call gen_re2          ! write nek mesh re2 file 
 
       end 
@@ -39,11 +45,40 @@ c-----------------------------------------------------------------------
 c read .msh file (version 2, ascii format)
 #     include "SIZE"
 
+      character*32  mshnam2
+      character*1   mshnam3(32)
       character*80 charline
+      character*1  charlin1(80)
       integer A,B,C,elemType
 
+      equivalence(mshnam2,mshnam3)
+      equivalence(charline,charlin1) 	  
+
+      call chcopy(mshnam2,mshname,32)	  
+      len = ltrunc(mshnam2,32)
+      call chcopy(mshnam3(len+1) ,'_1' , 2)
+
+
+      call blank (charline,80)
+      call chcopy(charlin1(1),'cp ',3)
+	
+      len = ltrunc(mshname,32)
+      call chcopy(charlin1(4),mshname,len)
+	
+      len = ltrunc(charline,80)
+      call chcopy(charlin1(len+1),' ',1)
+
+      len2 = ltrunc(mshnam2,32)
+      call chcopy(charlin1(len+2),mshnam2,len2)
+
+c      write(6,*) charline
+	  
+      call system(charline)	  
+
+      call blank (charline,80)
+
       open(299,file=mshname)
-      open(300,file=mshname)
+      open(300,file=mshnam2)
 
       write(6,*) 'Starting reading ',mshname
 
@@ -59,6 +94,13 @@ c end loop to "$Nodes"
 c read all nodes xyz
 1010  read(299,*) totalNode
       read(300,*)
+
+      if(totalNode.gt.max_num_elem) then
+       write(6,*) 'ERROR, increase MAXNEL to ',totalNode
+       write(6,*) 'and recompile gmsh2nek'
+       call exit(1)
+      endif
+
       do inode = 1,totalNode
       read(299,*)A,node_xyz(1,inode),node_xyz(2,inode)
      &,node_xyz(3,inode)
@@ -140,6 +182,18 @@ c proceed to next line in file handle 300.
 
       enddo
 
+      if(totalQuad.gt.max_num_elem) then
+       write(6,*) 'ERROR, increase MAXNEL to ',totalQuad
+       write(6,*) 'and recompile gmsh2nek'
+       call exit(1)
+      endif
+
+      if(totalHex.gt.max_num_elem) then
+       write(6,*) 'ERROR, increase MAXNEL to ',totalHex
+       write(6,*) 'and recompile gmsh2nek'
+       call exit(1)
+      endif
+
       write (6,*) 'total node number is ', totalNode
       write (6,*) 'total quad element number is ', totalQuad
       write (6,*) 'total hex element number is ', totalHex
@@ -152,6 +206,14 @@ c proceed to next line in file handle 300.
       num_dim = 3
       num_elem = totalHex
  
+      call blank (charline,80)
+      call chcopy(charlin1(1),'rm ',3)
+	
+      len = ltrunc(mshnam2,32)
+      call chcopy(charlin1(4),mshnam2,len)
+	
+      call system(charline)	
+
       return
       end
 C-----------------------------------------------------------------
@@ -168,7 +230,7 @@ c  Subroutine to convert gmsh hex20/hex27 to nek hex20/hex27 elements.
  
       integer hex_face_node(4,6)
       data hex_face_node
-     &      /1,2,5,6,2,3,6,7,3,4,7,8,1,4,5,8,
+     &      /1,2,6,5,2,3,7,6,3,4,8,7,1,4,8,5,
      &       1,2,3,4,5,6,7,8/
  
       integer fnode(4),ihex,imshvert,inekvert,ifoundquad
@@ -282,7 +344,251 @@ c imatch should equal 4 if fnode and quadnode is matching.
  
       return
       end
+C-----------------------------------------------------------------
+      subroutine setbc
+#     include "SIZE"
+c  set boundary condition 
+c  read from a file casename.bc
+
+      parameter (npbc_max=10) ! maximum pairs of periodic boundary condition
+
+      integer hex_face_node(4,6)
+      data hex_face_node
+     &      /1,2,6,5,2,3,7,6,3,4,8,7,1,4,8,5,
+     &       1,2,3,4,5,6,7,8/
+	 
+      integer parray(2,2,max_num_elem)
+
+      character*3 ubc
+      integer tags(2),ibc,nbc,io
+      integer ip,np,ipe,ipe2,nipe(2)
+      integer ptags(2,npbc_max),fnode(4)
+      real pvec(3,npbc_max),fpxyz(3,2)
+      real AB_v(3),AD_v(3),farea,product_v(3)
+      real dist,distMax,ptol
+	  
+      character*32 bcname
+      character*1 bcnam1(32)
+      equivalence(bcname,bcnam1)
+	  
+      call blank (bcname,32)
+
+      len = ltrunc(mshname,32)
+      call chcopy(bcnam1,mshname,(len-3))
+      call chcopy(bcnam1(len-3),'.bc' , 3)
+      len = ltrunc(bcnam1,32)
+	  
+      open(301,file=bcname,err=1010)
+      write(6,*) 'Setting boundary condition from ',bcname(:len),' file' 
+
+      read(301,*,iostat=io) nbc
+      if(io.ne.0) then
+         write(6,*) bcname(:len),' file is empty ',
+     &'please set boundary condition in .usr file'
+         return
+      endif		   
+
+        do ibc = 1,nbc
+        call blank (ubc,3)
+        read(301,*) tags(1),ubc
+c not periodic boundary condition, direct set it up
+          write(6,*) 'setting ',ubc,' to surface ',tags(1)
+          do ihex = 1, totalHex
+            do iface = 1,6
+               if(bc(5,iface,ihex).eq.tags(1)) then
+                 cbc(iface,ihex) = ubc
+               endif
+            enddo
+          enddo
+      enddo
+      ip = 0
+      read(301,*,iostat=io) nbc,ptol ! nbc is the number of pairs of periodic boundary condition
+                           ! ptol is the tolerence used to search periodic boundary conditin
+      if(io.ne.0) then
+         write(6,*) 'No periodic boundary condition set.'
+         return
+      endif					
+						  
+      if(nbc.gt.npbc_max) then
+         write(6,*) 'ERROR: increase npbc_max to ',nbc
+         return
+      endif
+	  
+      do ibc = 1,nbc
+	    ip = ip + 1
+        read(301,*) tags(1),tags(2),pvec(1,ip),pvec(2,ip),pvec(3,ip)
+c set periodic boundary condition.
+c read periodic mapping vector
+        ptags(1,ip) = tags(1)
+        ptags(2,ip) = tags(2)
+      enddo
+      close(301)
+ 
+      write(6,*) 'Setting periodic boundary condition' 
+      np = ip
+      do ip = 1,np
+          ipe = 0
+          do ihex = 1, totalHex
+            do iface = 1,6
+               if(bc(5,iface,ihex).eq.ptags(1,ip)) then
+                ipe = ipe + 1
+                parray(1,1,ipe) = ihex
+                parray(2,1,ipe) = iface
+               endif
+            enddo
+          enddo
+          nipe(1) = ipe
+	  
+          ipe = 0
+	      do ihex = 1, totalHex
+            do iface = 1,6
+               if(bc(5,iface,ihex).eq.ptags(2,ip)) then
+                ipe = ipe + 1
+                parray(1,2,ipe) = ihex
+                parray(2,2,ipe) = iface
+               endif
+            enddo
+          enddo
+          nipe(2) = ipe
+		  
+          write(6,*)'maping surface',ptags(1,ip),'with',nipe(1),
+     & 'faces'
+          write(6,*)'to surface',ptags(2,ip),'with',nipe(2),
+     & 'faces'
+
+          if(nipe(1).ne.nipe(2))  then
+            write(6,*) 'EORROR, face numbers are not matching'
+          endif
+
+          do ipe = 1,nipe(1)
+             ihex = parray(1,1,ipe)
+             iface = parray(2,1,ipe)
+c get face center xyz
+             call rzero(fpxyz(1,1),3)
+             do ifnode = 1,4
+             fnode(ifnode)=hex_array(hex_face_node(ifnode,iface)+2,ihex)
+             fpxyz(1,1) = fpxyz(1,1) + node_xyz(1,fnode(ifnode))/4.0
+             fpxyz(2,1) = fpxyz(2,1) + node_xyz(2,fnode(ifnode))/4.0
+             fpxyz(3,1) = fpxyz(3,1) + node_xyz(3,fnode(ifnode))/4.0
+             enddo
+
+c lopp over mapped faces to find its mapping face
+             distMax = 1000.0
+             do ipe2 = 1,nipe(2)
+                ihex2 = parray(1,2,ipe2)
+                iface2 = parray(2,2,ipe2)
+c get face center xyz
+               call rzero(fpxyz(1,2),3)
+               do ifnode = 1,4
+           fnode(ifnode)=hex_array(hex_face_node(ifnode,iface2)+2,ihex2)
+               fpxyz(1,2) = fpxyz(1,2) + node_xyz(1,fnode(ifnode))/4.0
+               fpxyz(2,2) = fpxyz(2,2) + node_xyz(2,fnode(ifnode))/4.0
+               fpxyz(3,2) = fpxyz(3,2) + node_xyz(3,fnode(ifnode))/4.0
+               enddo
+               
+              dist = sqrt((fpxyz(1,2) - fpxyz(1,1) - pvec(1,ip))**2
+     & + (fpxyz(2,2) - fpxyz(2,1) - pvec(2,ip))**2
+     & + (fpxyz(3,2) - fpxyz(3,1) - pvec(3,ip))**2)
+ 
+               if(dist.lt.distMax) then 
+                  distMax = dist
+                  !write(6,*) distMax
+                  if(distMax.le.ptol) then
+                  bc(1,iface,ihex) = ihex2*1.0
+                  bc(2,iface,ihex) = iface2*1.0
+                  bc(1,iface2,ihex2) = ihex*1.0
+                  bc(2,iface2,ihex2) = iface*1.0
+                  cbc(iface,ihex) = 'P  '
+                  cbc(iface2,ihex2) = 'P  '
+c               write(6,*) ihex,iface,bc(1,iface,ihex),bc(2,iface,ihex)
+c          write(6,*) ihex2,iface2,bc(1,iface2,ihex2),bc(2,iface2,ihex2)
+c          write(6,*) fpxyz(1,1),fpxyz(2,1),fpxyz(3,1)
+c          write(6,*) fpxyz(1,2),fpxyz(2,2),fpxyz(3,2)
+                  endif
+               endif
+             enddo
+          enddo
+
+          nperror = 0
+		  
+          write(6,*)'doing periodic check for surface',ptags(1,ip)
+
+          do ipe = 1,nipe(1)
+             ihex = parray(1,1,ipe)
+             iface = parray(2,1,ipe)
+             if (cbc(iface,ihex).ne.'P  ') then
+                  nperror = nperror +1 
+             endif
+          enddo
+          if (nperror.gt.0) write(6,*) 'ERROR,',nperror,
+     & 'faces did not map'
+
+          nperror = 0
+
+          do ipe = 1,nipe(1)
+             ihex = parray(1,1,ipe)
+             iface = parray(2,1,ipe)
+             ihex2 = int(bc(1,iface,ihex))
+             iface2 = int(bc(2,iface,ihex))
+             ihex3 = int(bc(1,iface2,ihex2))
+             iface3 = int(bc(2,iface2,ihex2))
+             if ((ihex.ne.ihex3).or.(ihex.ne.ihex3)) then
+			 
+cc for debug use only
+cc
+c                write(6,*) 'ERROR,',ihex,iface,' map to ',ihex2,iface2
+c                write(6,*) 'but,',ihex2,iface2,' map to ',ihex3,iface3
+c
+c		     do ifnode = 1,4
+c         fnode(ifnode)=hex_face_node(ifnode,iface)
+c      write(6,*)xm1(fnode(ifnode),1,1,ihex),ym1(fnode(ifnode),1,1,ihex),
+c     & zm1(fnode(ifnode),1,1,ihex) 
+c             enddo
+c			 
+c		     do ifnode = 1,4
+c         fnode(ifnode)=hex_face_node(ifnode,iface2)
+c      write(6,*)xm1(fnode(ifnode),1,1,ihex2),
+c     & ym1(fnode(ifnode),1,1,ihex2),zm1(fnode(ifnode),1,1,ihex2) 
+c             enddo
+c
+c		     do ifnode = 1,4
+c         fnode(ifnode)=hex_face_node(ifnode,iface3)
+c      write(6,*)xm1(fnode(ifnode),1,1,ihex3),
+c     & ym1(fnode(ifnode),1,1,ihex3),zm1(fnode(ifnode),1,1,ihex3) 
+c             enddo
+
+                nperror = nperror + 1
+             endif
+          enddo		  
+
+          if (nperror.gt.0) then
+          write(6,*) 'ERROR,',nperror,'faces are wrong',
+     & 'out of total ',nipe(1),' faces'
+          endif
+		  
+      enddo
+
+1010  return
+      end
 c--------------------------------------------------------------------
+c-----------------------------------------------------------------------
+      subroutine cross_product(AB_v,AC_v,prod_v,area)
+cc calculate cross product of two vectors
+
+      real*8 AB_v(3),AC_v(3),prod_v(3)
+      real*8 area
+
+      prod_v(1) = AB_v(2)*AC_v(3)-AB_v(3)*AC_v(2)
+      prod_v(2) = AB_v(3)*AC_v(1)-AB_v(1)*AC_v(3)
+      prod_v(3) = AB_v(1)*AC_v(2)-AB_v(2)*AC_v(1)
+	  
+      area = prod_v(1)**2 + prod_v(2)**2+prod_v(3)**2
+      area = sqrt(area)
+c      area = area/2.0
+	  
+      return 
+      end
+c------------------------------------------------------------------------------------------
       subroutine gen_re2
 #     include "SIZE"
 
@@ -450,7 +756,8 @@ C-----------------------------------------------------------------------
       do iel = 1,num_elem
         do ifc = 1,nface
           ch3 = cbc(ifc,iel)
-          if (ch3.eq.'MSH') then
+c          if (ch3.eq.'MSH') then
+          if (ch3.ne.'   ') then ! setting boundary condition.
             buf2(1)=iel
             buf2(2)=ifc
             call copy   (buf2(3),bc(1,ifc,iel),5)

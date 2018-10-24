@@ -32,13 +32,13 @@ c----------------------------------------------------------------------
 
       write(6,*) 'Please input option:'
       write(6,*) '1: assume pure hex20 mesh, original exo2nek'
-      write(6,*) '2: assume hybrid tetra10 and wedge15 mesh'
-      write(6,*) '    all tetra10 elements in block 1 (or first block)'
-      write(6,*) '    all wedge15 elements in block 2 (or second block)'
+      write(6,*) '2: assume hybrid tetra4 and wedge6 mesh'
+      write(6,*) '    all tetra4 elements in block 1 (or first block)'
+      write(6,*) '    all wedge6 elements in block 2 (or second block)'
       write(6,*) '3: assume hybrid hex20, tetra10 and wedge15 mesh'
-      write(6,*) '    all tetra10 elements in block 1 (or first block)'
-      write(6,*) '    all hex20   elements in block 2 (or second block)'
-      write(6,*) '    all wedge15 elements in block 3 (or third block)'
+      write(6,*) '    all tetra4 elements in block 1 (or first block)'
+      write(6,*) '    all hex8   elements in block 2 (or second block)'
+      write(6,*) '    all wedge6 elements in block 3 (or third block)'
 
       read (5,'(I1)') option
 	  
@@ -48,7 +48,6 @@ cc this part is
       call read_input_name
       call exodus_read
       call convert
-      call gen_re2
 
       elseif(option.EQ.2) then
 cc assume all element to be TRTRA10 and WEDGE15
@@ -57,7 +56,6 @@ cc WEDGE15 elements in block 2, one WEDGE15 exo element is converted to 3 hex20 
       call read_input_name
       call exodus_read_new ! exodus_read_new does not check element type in exodus file.
       call split_convert1
-      call gen_re2
 
       elseif(option.EQ.3) then
 cc assume all element to be HEX20 TRTRA10 and WEDGE15
@@ -70,11 +68,14 @@ c some other cases may also be benefited.
       call read_input_name
       call exodus_read_new ! exodus_read_new does not check element type in exodus file.
       call split_convert2
-      call gen_re2
+
       else
        write(6,*) 'Unknown option for exo2nek, ABORT.'
       endif
-
+      
+      call setbc
+      call gen_re2
+	  
       end 
 c-----------------------------------------------------------------------
       subroutine read_input_name
@@ -347,13 +348,29 @@ cc if tet.
        if (iel_exo.le.tetnumber) then
 cc now convert 1 tet10 element to 4 hex20 elements.
 
-       do ivert = 1, 10
+c       do ivert = 1, 10
+c       vert_index_exo = vert_index_exo + 1  
+c       tetver(1,ivert) = x_exo(connect(vert_index_exo))
+c       tetver(2,ivert) = y_exo(connect(vert_index_exo))
+c       tetver(3,ivert) = z_exo(connect(vert_index_exo))
+c       enddo
+
+cc read tet 4 . 
+cc linear interpolate to tet10
+       do ivert = 1, 4
        vert_index_exo = vert_index_exo + 1  
        tetver(1,ivert) = x_exo(connect(vert_index_exo))
        tetver(2,ivert) = y_exo(connect(vert_index_exo))
        tetver(3,ivert) = z_exo(connect(vert_index_exo))
        enddo
-	   
+
+       call average2vec(tetver(1,5),tetver(1,1),tetver(1,2))
+       call average2vec(tetver(1,6),tetver(1,2),tetver(1,3))
+       call average2vec(tetver(1,7),tetver(1,1),tetver(1,3))
+       call average2vec(tetver(1,8),tetver(1,1),tetver(1,4))
+       call average2vec(tetver(1,9),tetver(1,2),tetver(1,4))
+       call average2vec(tetver(1,10),tetver(1,3),tetver(1,4))
+
 cc assign sideset to tet elements
        call rzero(tetss,4)
        if (num_side_sets.ne.0) then
@@ -381,13 +398,41 @@ cc given tet10 vertices, and return you four hex coords.
 
       else ! if wedge elements 
       
-       do ivert = 1,15
+c       do ivert = 1,15
+c       vert_index_exo = vert_index_exo + 1  
+c       wedgever(1,ivert) = x_exo(connect(vert_index_exo))
+c       wedgever(2,ivert) = y_exo(connect(vert_index_exo))
+c       wedgever(3,ivert) = z_exo(connect(vert_index_exo))
+c       enddo
+
+cc read wedge 6,
+cc linear interpolate to wedge 15
+       do ivert = 1,6
        vert_index_exo = vert_index_exo + 1  
        wedgever(1,ivert) = x_exo(connect(vert_index_exo))
        wedgever(2,ivert) = y_exo(connect(vert_index_exo))
        wedgever(3,ivert) = z_exo(connect(vert_index_exo))
        enddo
-  
+	   
+       call average2vec(wedgever(1,7),wedgever(1,1),
+     & wedgever(1,2))
+       call average2vec(wedgever(1,8),wedgever(1,2),
+     & wedgever(1,3))
+       call average2vec(wedgever(1,9),wedgever(1,1),
+     & wedgever(1,3))
+       call average2vec(wedgever(1,10),wedgever(1,1),
+     & wedgever(1,4))
+       call average2vec(wedgever(1,11),wedgever(1,2),
+     & wedgever(1,5))
+       call average2vec(wedgever(1,12),wedgever(1,3),
+     & wedgever(1,6))
+       call average2vec(wedgever(1,13),wedgever(1,4),
+     & wedgever(1,5))
+       call average2vec(wedgever(1,14),wedgever(1,5),
+     & wedgever(1,6))
+       call average2vec(wedgever(1,15),wedgever(1,4),
+     & wedgever(1,6))
+
 cc assign sideset to wedge elements
        call rzero(wedgess,5)
        if (num_side_sets.ne.0) then
@@ -418,10 +463,22 @@ cc given wedge15 vertices, and return you four hex coords.
 	   
       enddo
 
+      if(iel_nek.gt.max_num_elem) then
+       write(6,*) 'ERROR, increase MAXNEL to ',iel_nek
+       write(6,*) 'and recompile exo2nek'
+       call exit(1)
+      endif
+	  
       write(6,*) 'Converted elements in nek:',iel_nek
       write(6,'(A)') 'Done :: Converting elements '
 	  
       num_elem = iel_nek
+
+      if(num_elem.gt.max_num_elem) then
+       write(6,*) 'ERROR, increase MAXNEL to ',num_elem
+       write(6,*) 'and recompile exo2nek'
+       call exit(1)
+      endif
 
       return
       end
@@ -497,13 +554,30 @@ c
 cc block 1, if tet.
        if (iel_exo.le.tetnumber) then
 cc now convert 1 tet10 element to 4 hex20 elements.
-       do ivert = 1, 10
+c       do ivert = 1, 10
+c       vert_index_exo = vert_index_exo + 1  
+c       tetver(1,ivert) = x_exo(connect(vert_index_exo))
+c       tetver(2,ivert) = y_exo(connect(vert_index_exo))
+c       tetver(3,ivert) = z_exo(connect(vert_index_exo))
+c       enddo
+
+cc read tet 4 . 
+cc linear interpolate to tet10
+       do ivert = 1, 4
        vert_index_exo = vert_index_exo + 1  
        tetver(1,ivert) = x_exo(connect(vert_index_exo))
        tetver(2,ivert) = y_exo(connect(vert_index_exo))
        tetver(3,ivert) = z_exo(connect(vert_index_exo))
        enddo
 
+       call average2vec(tetver(1,5),tetver(1,1),tetver(1,2))
+       call average2vec(tetver(1,6),tetver(1,2),tetver(1,3))
+       call average2vec(tetver(1,7),tetver(1,1),tetver(1,3))
+       call average2vec(tetver(1,8),tetver(1,1),tetver(1,4))
+       call average2vec(tetver(1,9),tetver(1,2),tetver(1,4))
+       call average2vec(tetver(1,10),tetver(1,3),tetver(1,4))
+	   
+	   
 cc assign sideset to tet elements
        call rzero(tetss,4)
        if (num_side_sets.ne.0) then
@@ -534,12 +608,34 @@ cc block 2, if exo hex element, convert to 8 nek hex elements
        elseif (iel_exo.gt.tetnumber
      &.and.(iel_exo.le.(tetnumber+ehexnumber))) then
 
-       do ivert = 1,20
+c       do ivert = 1,20
+c       vert_index_exo = vert_index_exo + 1  
+c       ehexver(1,ivert) = x_exo(connect(vert_index_exo))
+c       ehexver(2,ivert) = y_exo(connect(vert_index_exo))
+c       ehexver(3,ivert) = z_exo(connect(vert_index_exo))
+c       enddo
+
+cc read hex8
+cc linear interpolate to hex20	   
+       do ivert = 1,8
        vert_index_exo = vert_index_exo + 1  
        ehexver(1,ivert) = x_exo(connect(vert_index_exo))
        ehexver(2,ivert) = y_exo(connect(vert_index_exo))
        ehexver(3,ivert) = z_exo(connect(vert_index_exo))
        enddo
+
+       call average2vec(ehexver(1,9),ehexver(1,1),ehexver(1,2))
+       call average2vec(ehexver(1,10),ehexver(1,2),ehexver(1,3))
+       call average2vec(ehexver(1,11),ehexver(1,3),ehexver(1,4))
+       call average2vec(ehexver(1,12),ehexver(1,1),ehexver(1,4))
+       call average2vec(ehexver(1,13),ehexver(1,1),ehexver(1,5))
+       call average2vec(ehexver(1,14),ehexver(1,2),ehexver(1,6))
+       call average2vec(ehexver(1,15),ehexver(1,3),ehexver(1,7))
+       call average2vec(ehexver(1,16),ehexver(1,4),ehexver(1,8))
+       call average2vec(ehexver(1,17),ehexver(1,5),ehexver(1,6))
+       call average2vec(ehexver(1,18),ehexver(1,6),ehexver(1,7))
+       call average2vec(ehexver(1,19),ehexver(1,7),ehexver(1,8))
+       call average2vec(ehexver(1,20),ehexver(1,5),ehexver(1,8))
 
 cc assign sideset
        call rzero(ehexss,6)
@@ -569,12 +665,41 @@ cc assign sideset
 ! block 3, if WEDGE15 elements
       elseif (iel_exo.gt.(tetnumber+ehexnumber)) then
 	  
-       do ivert = 1,15
-       vert_index_exo = vert_index_exo + 1
+c       do ivert = 1,15
+c       vert_index_exo = vert_index_exo + 1
+c       wedgever(1,ivert) = x_exo(connect(vert_index_exo))
+c       wedgever(2,ivert) = y_exo(connect(vert_index_exo))
+c       wedgever(3,ivert) = z_exo(connect(vert_index_exo))
+c       enddo
+
+cc read wedge 6,
+cc linear interpolate to wedge 15
+       do ivert = 1,6
+       vert_index_exo = vert_index_exo + 1  
        wedgever(1,ivert) = x_exo(connect(vert_index_exo))
        wedgever(2,ivert) = y_exo(connect(vert_index_exo))
        wedgever(3,ivert) = z_exo(connect(vert_index_exo))
        enddo
+	   
+       call average2vec(wedgever(1,7),wedgever(1,1),
+     & wedgever(1,2))
+       call average2vec(wedgever(1,8),wedgever(1,2),
+     & wedgever(1,3))
+       call average2vec(wedgever(1,9),wedgever(1,1),
+     & wedgever(1,3))
+       call average2vec(wedgever(1,10),wedgever(1,1),
+     & wedgever(1,4))
+       call average2vec(wedgever(1,11),wedgever(1,2),
+     & wedgever(1,5))
+       call average2vec(wedgever(1,12),wedgever(1,3),
+     & wedgever(1,6))
+       call average2vec(wedgever(1,13),wedgever(1,4),
+     & wedgever(1,5))
+       call average2vec(wedgever(1,14),wedgever(1,5),
+     & wedgever(1,6))
+       call average2vec(wedgever(1,15),wedgever(1,4),
+     & wedgever(1,6))
+
 
 cc assign sideset to wedge elements
        call rzero(wedgess,5)
@@ -606,11 +731,23 @@ cc given wedge15 vertices, and return you 6 hex coords.
 
       enddo ! do iel_exo = 1, num_elem
 
+      if(iel_nek.gt.max_num_elem) then
+       write(6,*) 'ERROR, increase MAXNEL to ',iel_nek
+       write(6,*) 'and recompile exo2nek'
+       call exit(1)
+      endif
+	  
       write(6,*) 'Converted elements in nek:',iel_nek
       write(6,'(A)') 'Done :: Converting elements '
 
       num_elem = iel_nek
-
+	  
+      if(num_elem.gt.max_num_elem) then
+       write(6,*) 'ERROR, increase MAXNEL to ',num_elem
+       write(6,*) 'and recompile exo2nek'
+       call exit(1)
+      endif
+	  
       return
       end
 C--------------------------------------------------------------------
@@ -1171,6 +1308,249 @@ c--------------------------------------------------------------------
       return
       end
 c--------------------------------------------------------------------
+C-----------------------------------------------------------------
+      subroutine setbc
+#     include "SIZE"
+c  set boundary condition 
+c  read from a file casename.bc
+
+      parameter (npbc_max=10) ! maximum pairs of periodic boundary condition
+
+      character*3 ubc
+      integer tags(2),ibc,nbc,io,er
+      integer ip,np
+      integer ptags(2,npbc_max)
+      real  pvecs(3,npbc_max)
+	  
+      character*32 bcname
+      character*1 bcnam1(32)
+      equivalence(bcname,bcnam1)
+	  
+      call blank (bcname,32)
+
+      len = ltrunc(exoname,32)
+      call chcopy(bcnam1,exoname,(len-3))
+      call chcopy(bcnam1(len-3),'.bc' , 3)
+      len = ltrunc(bcnam1,32)
+
+      open(301,file=bcname,err=1010) ! if error, direct go to label 1010, return
+      write(6,*) 'Setting boundary condition from ',bcname(:len),' file' 
+
+      read(301,*,iostat=io) nbc
+      if(io.ne.0) then
+         write(6,*) bcname(:len),' file is empty ',
+     &'please set boundary condition in .usr file'
+         return
+      endif		
+
+       do ibc = 1,nbc
+        call blank (ubc,3)
+        read(301,*) tags(1),ubc
+c not periodic boundary condition, direct set it up
+          write(6,*) 'setting ',ubc,' to surface ',tags(1)
+          do ihex = 1, num_elem
+            do iface = 1,6
+               if(bc(5,iface,ihex).eq.tags(1)) then
+                 cbc(iface,ihex) = ubc
+               endif
+            enddo
+          enddo
+      enddo
+      ip = 0
+      read(301,*,iostat=io) nbc,ptol ! nbc is the number of pairs of periodic boundary condition
+                           ! ptol is the tolerence used to search periodic boundary conditin
+      if(io.ne.0) then
+         write(6,*) 'No periodic boundary condition set.'
+         return
+      endif					
+			  
+      if(nbc.gt.npbc_max) then
+         write(6,*) 'ERROR: increase npbc_max to ',nbc
+         return
+      endif
+      do ibc = 1,nbc
+	    ip = ip + 1
+        read(301,*) ptags(1,ip),ptags(2,ip),
+     & pvecs(1,ip),pvecs(2,ip),pvecs(3,ip)
+cc ptags(1,ip) is surface 1 number
+cc ptags(2,ip) is surface 2 number
+cc pvecs(1,ip),pvecs(2,ip),pvecs(3,ip) is user defined projection vector
+      enddo
+      close(301)
+
+      write(6,*) 'Setting periodic boundary condition' 
+      np = ip
+c np is the pairs of periodic bc.
+      do ip = 1,np
+c mapping surface ptags(1,ip) to surface ptags(2,ip)
+         call setPeriodic(ptags(1,ip),pvecs(1,ip),ptol)
+      enddo
+
+1010  return
+      end
+c--------------------------------------------------------------------
+      subroutine setPeriodic(ptags,pvec,ptol)
+#     include "SIZE"
+
+      integer hex_face_node(4,6)
+      data hex_face_node
+     &      /1,3,21,19,3,9,27,21,7,9,27,25,1,7,25,19,
+     &       1,7,9,3,19,21,27,25/
+
+      integer parray(2,2,max_num_elem)
+      real parea(2,max_num_elem)
+
+      integer fnode(4),ifnode,ptags(2),ipe,nipe(2),nperror
+      real pvec(3),ptol,fpxyz(3,2)
+      real dist,distMax
+
+      ipe = 0
+
+c collect ihex,iface for surface ptags(1)
+      do ihex = 1,num_elem
+         do iface = 1,6
+            if(bc(5,iface,ihex).eq.ptags(1)) then 
+              ipe = ipe + 1
+              parray(1,1,ipe) = ihex
+              parray(2,1,ipe) = iface
+            endif
+         enddo
+      enddo
+      nipe(1) = ipe
+
+c collect ihex,iface for surface ptags(2)
+      ipe = 0
+      do ihex = 1, num_elem
+         do iface = 1,6
+            if(bc(5,iface,ihex).eq.ptags(2)) then
+                ipe = ipe + 1
+                parray(1,2,ipe) = ihex
+                parray(2,2,ipe) = iface
+             endif
+         enddo
+      enddo
+      nipe(2) = ipe
+
+      write(6,*)'maping surface',ptags(1),'with',nipe(1),'faces'
+      write(6,*)'to surface',ptags(2),'with',nipe(2),'faces' 
+
+      if(nipe(1).ne.nipe(2))  then
+         write(6,*) 'EORROR, face numbers are not matching'
+         return
+      endif
+
+c 1st loop, loop faces on surface 1
+      do ipe = 1,nipe(1)
+         ihex = parray(1,1,ipe)
+         iface = parray(2,1,ipe)
+c get face center xyz
+         call rzero(fpxyz(1,1),3)				
+	     do ifnode = 1,4
+             fnode(ifnode)=hex_face_node(ifnode,iface)
+             fpxyz(1,1) = fpxyz(1,1)+xm1(fnode(ifnode),1,1,ihex)*0.25
+             fpxyz(2,1) = fpxyz(2,1)+ym1(fnode(ifnode),1,1,ihex)*0.25
+             fpxyz(3,1) = fpxyz(3,1)+zm1(fnode(ifnode),1,1,ihex)*0.25			 
+         enddo
+
+c 2nd,loop over surface 2
+         distMax = 1000.0
+         do ipe2 = 1,nipe(2)
+                ihex2 = parray(1,2,ipe2)
+                iface2 = parray(2,2,ipe2)
+c get face center xyz
+               call rzero(fpxyz(1,2),3)
+               do ifnode = 1,4
+               fnode(ifnode)=hex_face_node(ifnode,iface2)
+               fpxyz(1,2) = fpxyz(1,2)+xm1(fnode(ifnode),1,1,ihex2)*0.25
+               fpxyz(2,2) = fpxyz(2,2)+ym1(fnode(ifnode),1,1,ihex2)*0.25
+               fpxyz(3,2) = fpxyz(3,2)+zm1(fnode(ifnode),1,1,ihex2)*0.25
+              enddo
+ 
+               dist = sqrt((fpxyz(1,2) - fpxyz(1,1) - pvec(1))**2
+     & + (fpxyz(2,2) - fpxyz(2,1) - pvec(2))**2
+     & + (fpxyz(3,2) - fpxyz(3,1) - pvec(3))**2)
+
+               if (dist.lt.distMax) then 
+                  distMax = dist
+                  !write(6,*) distMax
+                  if(distMax.le.ptol) then
+                  bc(1,iface,ihex) = ihex2*1.0
+                  bc(2,iface,ihex) = iface2*1.0
+                  bc(1,iface2,ihex2) = ihex*1.0
+                  bc(2,iface2,ihex2) = iface*1.0
+                  cbc(iface,ihex) = 'P  '
+                  cbc(iface2,ihex2) = 'P  '
+cc for debug use only
+cc          write(6,*) ihex,iface,bc(1,iface,ihex),bc(2,iface,ihex)
+cc          write(6,*) ihex2,iface2,bc(1,iface2,ihex2),bc(2,iface2,ihex2)
+cc          write(6,*) fpxyz(1,1),fpxyz(2,1),fpxyz(3,1)
+cc          write(6,*) fpxyz(1,2),fpxyz(2,2),fpxyz(3,2)
+cc          write(6,*) dist,areadiff,parea(1,ipe),parea(2,ipe2)
+                  endif
+               endif
+         enddo
+      enddo
+
+          nperror = 0
+		  
+          write(6,*)'doing periodic check for surface',ptags(1)
+
+          do ipe = 1,nipe(1)
+             ihex = parray(1,1,ipe)
+             iface = parray(2,1,ipe)
+             if (cbc(iface,ihex).ne.'P  ') then
+                  nperror = nperror +1 
+             endif
+          enddo
+          if (nperror.gt.0) write(6,*) 'ERROR,',nperror,
+     & 'faces did not map'
+
+          nperror = 0
+
+          do ipe = 1,nipe(1)
+             ihex = parray(1,1,ipe)
+             iface = parray(2,1,ipe)
+             ihex2 = int(bc(1,iface,ihex))
+             iface2 = int(bc(2,iface,ihex))
+             ihex3 = int(bc(1,iface2,ihex2))
+             iface3 = int(bc(2,iface2,ihex2))
+             if ((ihex.ne.ihex3).or.(ihex.ne.ihex3)) then
+			 
+cc for debug use only
+cc
+c                write(6,*) 'ERROR,',ihex,iface,' map to ',ihex2,iface2
+c                write(6,*) 'but,',ihex2,iface2,' map to ',ihex3,iface3
+c
+c		     do ifnode = 1,4
+c         fnode(ifnode)=hex_face_node(ifnode,iface)
+c      write(6,*)xm1(fnode(ifnode),1,1,ihex),ym1(fnode(ifnode),1,1,ihex),
+c     & zm1(fnode(ifnode),1,1,ihex) 
+c             enddo
+c			 
+c		     do ifnode = 1,4
+c         fnode(ifnode)=hex_face_node(ifnode,iface2)
+c      write(6,*)xm1(fnode(ifnode),1,1,ihex2),
+c     & ym1(fnode(ifnode),1,1,ihex2),zm1(fnode(ifnode),1,1,ihex2) 
+c             enddo
+c
+c		     do ifnode = 1,4
+c         fnode(ifnode)=hex_face_node(ifnode,iface3)
+c      write(6,*)xm1(fnode(ifnode),1,1,ihex3),
+c     & ym1(fnode(ifnode),1,1,ihex3),zm1(fnode(ifnode),1,1,ihex3) 
+c             enddo
+
+                nperror = nperror + 1
+             endif
+          enddo		  
+
+          if (nperror.gt.0) then
+          write(6,*) 'ERROR,',nperror,'faces are wrong',
+     & 'out of total ',nipe(1),' faces'
+          endif
+
+      return
+      end
+c--------------------------------------------------------------------
 C all blow part is direct takend from origin exo2nek.f, totally unchanged
 C
 c-----------------------------------------------------------------------
@@ -1656,7 +2036,8 @@ C-----------------------------------------------------------------------
       do iel = 1,num_elem
         do ifc = 1,nface
           ch3 = cbc(ifc,iel)
-          if (ch3.eq.'EXO') then
+          if (ch3.ne.'   ') then
+c          if (ch3.eq.'EXO') then
             buf2(1)=iel
             buf2(2)=ifc
             call copy   (buf2(3),bc(1,ifc,iel),5)
