@@ -1,5 +1,6 @@
 gmsh2nek
-convert gmsh .msh to nek .re2 file
+convert gmsh .msh (version 2, ascii format) to nek .re2 file
+only support 3D mesh
 Haomin Yuan, 9/17/2018.
 
 notes about usage
@@ -21,3 +22,17 @@ Physical tags are needed for all surface elements to be dumped out by gmsh
       enddo
       enddo
 id_face is the physical tags assigned to surface elements.
+
+4. You could also include a .bc file to direct assign boundary when doing gmsh2nek conversion
+please check doubleY.bc in gmsh2nek_testcases/
+
+doubleY.bc
+
+1                            ! number of non-periodic boundary condition
+7 W                          ! physical tag number, boundary condition (note for wall is 'W  ', inlet for 'v  ', etc)
+3 1e-6                       ! number of pairs of periodic boundary condition, tolerence
+1 2 0.0 0.0 10.0             ! surface 1 mapping to surface 2, with vector (0.0,0.0,10.0)
+3 4 0.86602540378 -0.5 0.0   ! surface 3 mapping to surface 4, with vector (0.86602540378,-0.5,0.0)
+5 6 -0.86602540378 -0.5 0.0  ! surface 5 mapping to surface 6, with vector (-0.86602540378,-0.5,0.0)
+                             ! mesh on periodic surface should be conformal.
+
