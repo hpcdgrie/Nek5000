@@ -1,0 +1,13 @@
+usage of blr.usr
+boundary layer refinment
+
+1. Assume there is boundary layer.
+
+2. morphing the boundary layer by half.
+need more refine ?
+just change blratio in getmvv()
+
+3. assume 
+inlet- sideset 1 (or surface 1)
+outlet - sideset 2 (or surface 2)
+wall - sideset 3 (or surface 3)

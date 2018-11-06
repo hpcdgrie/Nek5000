@@ -1,0 +1,639 @@
+c-----------------------------------------------------------------------
+c  nek5000 user-file template
+c
+c  user specified routines:
+c     - uservp  : variable properties
+c     - userf   : local acceleration term for fluid
+c     - userq   : local source term for scalars
+c     - userbc  : boundary conditions
+c     - useric  : initial conditions
+c     - userchk : general purpose routine for checking errors etc.
+c     - userqtl : thermal divergence for lowMach number flows 
+c     - usrdat  : modify element vertices 
+c     - usrdat2 : modify mesh coordinates
+c     - usrdat3 : general purpose routine for initialization
+c     
+c-----------------------------------------------------------------------
+cc
+c assume boundary is conformal to geometry.
+c morphing bounldary layer elements thickness to get better y+
+c 
+c-----------------------------------------------------------------------
+      subroutine uservp(ix,iy,iz,eg) ! set variable properties
+
+c      implicit none
+
+      integer ix,iy,iz,eg
+     
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e
+c     e = gllel(eg)
+
+      udiff  = 0.0
+      utrans = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userf(ix,iy,iz,eg) ! set acceleration term
+c
+c     Note: this is an acceleration term, NOT a force!
+c     Thus, ffx will subsequently be multiplied by rho(x,t).
+c
+c      implicit none
+
+      integer ix,iy,iz,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e
+c     e = gllel(eg)
+
+      ffx = 0.0
+      ffy = 0.0
+      ffz = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userq(ix,iy,iz,eg) ! set source term
+
+c      implicit none
+
+      integer ix,iy,iz,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e
+c     e = gllel(eg)
+
+      qvol   = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userbc(ix,iy,iz,iside,eg) ! set up boundary conditions
+c
+c     NOTE ::: This subroutine MAY NOT be called by every process
+c
+c      implicit none
+
+      integer ix,iy,iz,iside,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+      integer e
+      e = gllel(eg)
+
+c      if (cbc(iside,gllel(eg),ifield).eq.'v01')
+
+      ux   = 0.0
+      uy   = 0.0
+      uz   = 0.0
+      temp = 0.0
+C      if (cbc(iside,e,1).eq.'mv ') ux = 0.5/100.0
+	  
+	  
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine useric(ix,iy,iz,eg) ! set up initial conditions
+
+c      implicit none
+
+      integer ix,iy,iz,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      ux   = 0.0
+      uy   = 0.0
+      uz   = 0.0
+      temp = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userchk()
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      if(istep.eq.0) then
+      call getmvv
+c      call exitt()
+      endif
+
+      call my_mv_mesh()
+
+      if(istep.eq.100) then
+
+	    do iel=1,nelv
+        do ifc=1,2*ndim
+          id_face = bc(5,ifc,iel,1)
+          if (id_face.eq.1) then       ! SideSet 1 
+             cbc(ifc,iel,1) = 'v  '
+          elseif (id_face.eq.2) then   ! SideSet 2 
+             cbc(ifc,iel,1) = 'O  '
+          elseif (id_face.eq.3) then   ! SideSet 3
+             cbc(ifc,iel,1) = 'W  '
+          endif
+        enddo
+        enddo
+	    call gen_rea(2)
+        call exitt()
+
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userqtl ! Set thermal divergence
+
+      call userqtl_scig 
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat()   ! This routine to modify element vertices
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat2()  ! This routine to modify mesh coordinates
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+      integer iel,ifc,id_face
+      common /usr_bound/ cbc_usr(6,lelt)
+      character*3 cbc_usr
+
+        do iel=1,nelv
+        do ifc=1,2*ndim
+          id_face = bc(5,ifc,iel,1)
+          if (id_face.eq.1) then       ! SideSet 1 inlet
+             cbc(ifc,iel,1) = 'v  '
+             cbc_usr(ifc,iel) = 'W1 '
+          elseif (id_face.eq.2) then   ! SideSet 2 outlet
+             cbc(ifc,iel,1) = 'O  '
+             cbc_usr(ifc,iel) = 'W1 '
+          elseif (id_face.eq.3) then   ! SideSet 3 boundary surface for refine.
+             cbc(ifc,iel,1) = 'mv '
+             cbc_usr(ifc,iel) = 'mv '
+          endif
+        enddo
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat3()
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c----------------------------------------------------------------------
+      subroutine getmvv
+cc get moving velocity of boundary layer elements.
+cc apply linear velocity to boundary layer elements
+cc problems
+cc 1. how to apply moving velocity to interial elements ? using cheapdist ?
+cc 2. 
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      common /usr_umesh/ umeshx(lx1,ly1,lz1,lelt),
+     & umeshy(lx1,ly1,lz1,lelt),
+     & umeshz(lx1,ly1,lz1,lelt)
+
+      common /usr_umesh1/ umeshx1(lx1,ly1,lz1,lelt),
+     & umeshy1(lx1,ly1,lz1,lelt),
+     & umeshz1(lx1,ly1,lz1,lelt)
+
+      integer iel,ifc,id_face
+      real*8 xx,yy,zz
+      real*8 mvxx,mvyy,mvzz
+      real*8 gvec(3),glength,glengt1
+      real*8 maskflag
+	  
+      ntot = nx1*ny1*nz1*nelv
+
+      call rzero(umeshx,ntot)
+      call rzero(umeshy,ntot)
+      call rzero(umeshz,ntot)
+      
+      call rzero(umeshx1,ntot)
+      call rzero(umeshy1,ntot)
+      call rzero(umeshz1,ntot)
+
+      do iel=1,nelv
+      do ifc=1,2*ndim
+            if (cbc(ifc,iel,1).eq.'mv ') then
+            call facind(i0,i1,j0,j1,k0,k1,nx1,ny1,nz1,ifc)
+            do k=k0,k1
+            do j=j0,j1
+            do i=i0,i1
+              call getnormal(i,j,k,ifc,iel,gvec,glength)
+
+cc umesh contans the velcity of bouldary layer elements
+cc umesh1 contains the fake velocity of boundary layer elements on boulday surf
+cc for surface gl points, does not move.
+            umeshx(i,j,k,iel) = 0.0
+            umeshy(i,j,k,iel) = 0.0
+            umeshz(i,j,k,iel) = 0.0
+
+            umeshx1(i,j,k,iel) = gvec(1)*glength
+            umeshy1(i,j,k,iel) = gvec(2)*glength
+            umeshz1(i,j,k,iel) = gvec(3)*glength 
+
+              if(k0.eq.k1) then
+                 if(k0.eq.1) then
+                   do kn = 2,lz1
+       umeshx(i,j,kn,iel) = gvec(1)*glength*(dble(kn-1)/dble(lz1-1))
+       umeshy(i,j,kn,iel) = gvec(2)*glength*(dble(kn-1)/dble(lz1-1))
+       umeshz(i,j,kn,iel) = gvec(3)*glength*(dble(kn-1)/dble(lz1-1))
+                   enddo
+                 elseif(k0.eq.lz1) then
+                   do kn = 1,lz1-1
+       umeshx(i,j,kn,iel) = gvec(1)*glength*(1.0-dble(kn-1)/dble(lz1-1))
+       umeshy(i,j,kn,iel) = gvec(2)*glength*(1.0-dble(kn-1)/dble(lz1-1))
+       umeshz(i,j,kn,iel) = gvec(3)*glength*(1.0-dble(kn-1)/dble(lz1-1))
+                   enddo
+                 endif
+              elseif(j0.eq.j1) then
+                 if(j0.eq.1) then
+                   do jn = 2,ly1
+       umeshx(i,jn,k,iel) = gvec(1)*glength*(dble(jn-1)/dble(ly1-1))
+       umeshy(i,jn,k,iel) = gvec(2)*glength*(dble(jn-1)/dble(ly1-1))
+       umeshz(i,jn,k,iel) = gvec(3)*glength*(dble(jn-1)/dble(ly1-1)) 	   
+                   enddo
+                 elseif(j0.eq.ly1) then
+                   do jn = 1,ly1-1
+       umeshx(i,jn,k,iel) = gvec(1)*glength*(1.0-dble(jn-1)/dble(ly1-1))
+       umeshy(i,jn,k,iel) = gvec(2)*glength*(1.0-dble(jn-1)/dble(ly1-1))
+       umeshz(i,jn,k,iel) = gvec(3)*glength*(1.0-dble(jn-1)/dble(ly1-1))
+                   enddo
+                 endif
+              elseif(i0.eq.i1) then
+                  if(i0.eq.1) then
+                   do in = 2,lx1
+       umeshx(in,j,k,iel) = gvec(1)*glength*(dble(in-1)/dble(lx1-1))
+       umeshy(in,j,k,iel) = gvec(2)*glength*(dble(in-1)/dble(lx1-1))
+       umeshz(in,j,k,iel) = gvec(3)*glength*(dble(in-1)/dble(lx1-1))	   
+                   enddo
+                  elseif(i0.eq.lx1) then
+                   do in = 1,lx1-1
+       umeshx(in,j,k,iel) = gvec(1)*glength*(1.0-dble(in-1)/dble(lx1-1))
+       umeshy(in,j,k,iel) = gvec(2)*glength*(1.0-dble(in-1)/dble(lx1-1))
+       umeshz(in,j,k,iel) = gvec(3)*glength*(1.0-dble(in-1)/dble(lx1-1))
+                   enddo
+                  endif
+              endif
+            enddo
+            enddo
+            enddo
+           endif
+      enddo
+      enddo
+
+      blratio = 0.5 !final BL thickness / initial BL tickness
+
+      do i = 1,ntot
+      umeshx(i,1,1,1) = (1.0-blratio)*
+     &umeshx(i,1,1,1)/(dble(param(11))*dt)
+      umeshy(i,1,1,1) = (1.0-blratio)*
+     &umeshy(i,1,1,1)/(dble(param(11))*dt)
+      umeshz(i,1,1,1) = (1.0-blratio)*
+     &umeshz(i,1,1,1)/(dble(param(11))*dt)
+
+      umeshx1(i,1,1,1)=(1.0-blratio)*
+     &umeshx1(i,1,1,1)/(dble(param(11))*dt)
+      umeshy1(i,1,1,1)=(1.0-blratio)*
+     &umeshy1(i,1,1,1)/(dble(param(11))*dt)
+      umeshz1(i,1,1,1)=(1.0-blratio)*
+     &umeshz1(i,1,1,1)/(dble(param(11))*dt)
+      enddo	  
+
+      pmax=glmax(umeshx,ntot)  
+      pmin=glmin(umeshx,ntot)
+      if (nid.eq.0) write(6,*) "umeshx: ",pmin," - ",pmax
+	  
+      pmax=glmax(umeshy,ntot)  
+      pmin=glmin(umeshy,ntot)
+      if (nid.eq.0) write(6,*) "umeshy: ",pmin," - ",pmax
+	 
+      pmax=glmax(umeshz,ntot)  
+      pmin=glmin(umeshz,ntot)
+      if (nid.eq.0) write(6,*) "umeshz: ",pmin," - ",pmax
+	  
+      call outpost(umeshx,umeshy,umeshz,pr,pr,'tst')
+      call outpost(umeshx1,umeshy1,umeshz1,pr,pr,'ts2')
+
+      return
+      end
+c----------------------------------------------------------------------
+c----------------------------------------------------------------------
+      subroutine getnormal(i,j,k,f,e,gvec,length)
+cc calculate normal vector of this grid point.
+cc assume this grid point is on one face
+cc the returned vector always point out of the domain.
+      include 'SIZE'
+      include 'TOTAL'  
+      integer i,j,k,f,e
+      real*8 gvec(3),length  
+
+      if (f.eq.1) then
+      gvec(1) = -(xm1(i,ly1,k,e) - xm1(i,1,k,e))
+      gvec(2) = -(ym1(i,ly1,k,e) - ym1(i,1,k,e))
+      gvec(3) = -(zm1(i,ly1,k,e) - zm1(i,1,k,e))
+      elseif(f.eq.2) then
+      gvec(1) = -(xm1(1,j,k,e) - xm1(lx1,j,k,e))
+      gvec(2) = -(ym1(1,j,k,e) - ym1(lx1,j,k,e))
+      gvec(3) = -(zm1(1,j,k,e) - zm1(lx1,j,k,e))
+      elseif(f.eq.3) then
+      gvec(1) = -(xm1(i,1,k,e) - xm1(i,ly1,k,e))
+      gvec(2) = -(ym1(i,1,k,e) - ym1(i,ly1,k,e))
+      gvec(3) = -(zm1(i,1,k,e) - zm1(i,ly1,k,e))
+      elseif(f.eq.4) then
+      gvec(1) = -(xm1(lx1,j,k,e) - xm1(1,j,k,e))
+      gvec(2) = -(ym1(lx1,j,k,e) - ym1(1,j,k,e))
+      gvec(3) = -(zm1(lx1,j,k,e) - zm1(1,j,k,e))
+      elseif(f.eq.5) then
+      gvec(1) = -(xm1(i,j,lz1,e) - xm1(i,j,1,e))
+      gvec(2) = -(ym1(i,j,lz1,e) - ym1(i,j,1,e))
+      gvec(3) = -(zm1(i,j,lz1,e) - zm1(i,j,1,e))
+      elseif(f.eq.6) then
+      gvec(1) = -(xm1(i,j,1,e) - xm1(i,j,lz1,e))
+      gvec(2) = -(ym1(i,j,1,e) - ym1(i,j,lz1,e))
+      gvec(3) = -(zm1(i,j,1,e) - zm1(i,j,lz1,e))
+      endif
+	  
+      length = sqrt(gvec(1)**2 + gvec(2)**2 + gvec(3)**2)
+      gvec(1) = gvec(1)/length
+      gvec(2) = gvec(2)/length
+      gvec(3) = gvec(3)/length  
+
+      return
+      end
+c--------------------------------------------------------------
+      subroutine my_mv_mesh
+cc this subroutine calculate the actual mesh moving velocity wx/y/z
+cc from umeshx/y/z.
+cc
+      include 'SIZE'
+      include 'TOTAL'
+      common /usr_umesh/ umeshx(lx1,ly1,lz1,lelt),
+     & umeshy(lx1,ly1,lz1,lelt),
+     & umeshz(lx1,ly1,lz1,lelt)
+
+      common /usr_umesh1/ umeshx1(lx1,ly1,lz1,lelt),
+     & umeshy1(lx1,ly1,lz1,lelt),
+     & umeshz1(lx1,ly1,lz1,lelt)
+
+      parameter (lt = lx1*ly1*lz1*lelt)
+      common /mrthoi/ napprx(2),nappry(2),napprz(2)
+      common /mrthov/ apprx(lt,0:mxprev)
+     $              , appry(lt,0:mxprev)
+     $              , apprz(lt,0:mxprev)
+      common /mstuff/ d(lt),h1(lt),h2(lt),mask(lt)
+      common /usr_bound/ cbc_usr(6,lelt)
+      character*3 cbc_usr
+      real mask,pmax,pmin
+      real srfbl,volbl,delta,deltap1,deltap2,arg1,arg2
+      real zero,one
+      integer e,f
+      integer icalld
+      save    icalld
+      data    icalld /0/
+
+      n = nx1*ny1*nz1*nelv
+      nface = 2*ndim
+
+      if (icalld.eq.0) then
+         icalld=1
+         napprx(1)=0
+         nappry(1)=0
+         napprz(1)=0
+         nxz   = nx1*nz1
+         nxyz  = nx1*ny1*nz1
+         srfbl = 0.   ! Surface area of elements in b.l.
+         volbl = 0.   ! Volume of elements in boundary layer
+         do e=1,nelv
+         do f=1,nface
+            if (cbc_usr(f,e).eq.'mv ') then
+               srfbl = srfbl + vlsum(area(1,1,f,e),nxz )
+               volbl = volbl + vlsum(bm1 (1,1,1,e),nxyz)
+            endif
+         enddo
+         enddo
+         srfbl = glsum(srfbl,1)  ! Sum over all processors
+         volbl = glsum(volbl,1)
+         delta = volbl / srfbl   ! Avg thickness of b.l. elements
+c        delta = 0.02            ! 1/2 separation of cylinders
+         call rone (h1,n)
+         call rzero(h2,n)
+
+         call cheap_dist(d,1,'mv ')
+cc distf()
+
+         if (nid.eq.0) write(6,*) "delta: ",delta
+         deltap1 = 2.0*delta  ! Protected b.l. thickness
+         deltap2 = 4.0*delta
+cc explanation of deltap1 and deltap2.
+cc deltap1 and deltap2 are used to help the decaying function
+cc if deltap1,deltap2 get larger, then mesh far from face is geting moved.
+cc if deltap1,deltap2 get smaller, then mesh on face is more moved.
+
+         do i=1,n
+            arg1   = -(d(i)/deltap1)**2
+            arg2   = -(d(i)/deltap2)**2
+            h1(i)  = h1(i) + 1000.0*exp(arg1) + 10.0*exp(arg2)
+         enddo
+
+         call rone(mask,n)
+         do e=1,nelv
+         do f=1,nface
+           zero = 0.
+           one  = 1.
+         if(cbc_usr(f,e).eq.'W  ')call facev(mask,e,f,zero,nx1,ny1,nz1)
+         if(cbc_usr(f,e).eq.'W1 ')call facev(mask,e,f,one,nx1,ny1,nz1)    !! for sliding walls.
+         if(cbc_usr(f,e).eq.'v  ')call facev(mask,e,f,zero,nx1,ny1,nz1)
+         if(cbc_usr(f,e).eq.'mv ')call facev(mask,e,f,zero,nx1,ny1,nz1)
+         if(cbc_usr(f,e).eq.'O  ')call facev(mask,e,f,zero,nx1,ny1,nz1)
+         enddo
+         enddo
+         call dsop(mask,'*  ',nx1,ny1,nz1)    ! dsop mask
+         call opzero(wx,wy,wz)
+c        call outpost(w1mask,w2mask,w3mask,mask,mask,'msk')
+c        call exitti('QUIT MASK$',nx1)
+
+      endif
+
+cc      if (nid.eq.0) write(6,*) "delta: ",delta
+
+      do e=1,nelv
+      do f=1,nface
+         if (cbc_usr(f,e).eq.'mv ') then
+           call facec(wx,umeshx1,e,f,nx1,ny1,nz1,nelv)
+           call facec(wy,umeshy1,e,f,nx1,ny1,nz1,nelv)
+           call facec(wz,umeshz1,e,f,nx1,ny1,nz1,nelv)
+         endif
+      enddo
+      enddo
+      tol = -1.e-3
+
+      utx_usr=glamax(umeshx,n)
+      uty_usr=glamax(umeshy,n)
+      utz_usr=glamax(umeshz,n)
+
+      if (nid.eq.0) write(6,*) "utx_usr: ",utx_usr
+      if (nid.eq.0) write(6,*) "uty_usr: ",uty_usr
+      if (nid.eq.0) write(6,*) "utz_usr: ",utz_usr
+
+      if (utx_usr.gt.1e-8)
+     & call laplaceh('mshx',wx,h1,h2,mask,vmult,1,tol,
+     & 500,apprx,napprx)
+      if (uty_usr.gt.1e-8)
+     & call laplaceh('mshy',wy,h1,h2,mask,vmult,1,tol,
+     & 500,appry,nappry)
+      if (utz_usr.gt.1e-8)
+     & call laplaceh('mshz',wz,h1,h2,mask,vmult,1,tol,
+     & 500,apprz,napprz)
+
+
+      do e=1,nelv
+      do f=1,2*ndim
+        if (cbc_usr(f,e).eq.'mv ') then
+         do i = 1,lx1*ly1*lz1
+          wx(i,1,1,e) = umeshx(i,1,1,e)
+          wy(i,1,1,e) = umeshy(i,1,1,e)
+          wz(i,1,1,e) = umeshz(i,1,1,e)
+         enddo
+        endif
+      enddo
+      enddo
+
+	  call opcolv  (wx,wy,wz,bm1)
+      call opdssum (wx,wy,wz)
+      call opcolv  (wx,wy,wz,binvm1)
+
+      ifxyo=.true.
+      if (mod(istep,iostep).eq.0) call outpost(wx,wy,wz,h1,h1,'mvv')
+c      if (mod(istep,iostep).eq.0) then
+c      call outpost(umeshx,umeshy,umeshz,h1,h1,'mv2')
+c      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine laplaceh
+     $     (name,u,h1,h2,mask,mult,ifld,tli,maxi,approx,napprox)
+c
+c     Solve Laplace's equation, with projection onto previous solutions.
+c
+c     Boundary condition strategy:
+c
+c     u = u0 + ub
+c
+c        u0 = 0 on Dirichlet boundaries
+c        ub = u on Dirichlet boundaries
+c
+c        _
+c        A ( u0 + ub ) = 0
+c
+c        _            _
+c        A  u0  =   - A ub
+c
+c        _             _
+c       MAM u0  =   -M A ub,    M is the mask
+c
+c                      _
+c        A  u0  =   -M A ub ,  Helmholtz solve with SPD matrix A
+c
+c        u = u0+ub
+c
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CTIMER'
+c
+      character*4 name
+      real u(1),h1(1),h2(1),mask(1),mult(1),approx (1)
+      integer   napprox(1)
+
+      parameter (lt=lx1*ly1*lz1*lelt)
+      common /scruz/ r (lt),ub(lt)
+
+      logical ifstdh
+      character*4  cname
+      character*6  name6
+
+      logical ifwt,ifvec
+
+      call chcopy(cname,name,4)
+      call capit (cname,4)
+
+      call blank (name6,6)
+      call chcopy(name6,name,4)
+      ifwt  = .true.
+      ifvec = .false.
+      isd   = 1
+      imsh  = 1
+      nel   = nelfld(ifld)
+
+      n = nx1*ny1*nz1*nel
+
+      call copy (ub,u,n)             ! ub = u on boundary
+      call dsavg(ub)                 ! Make certain ub is in H1
+                                     !     _
+      call axhelm (r,ub,h1,h2,1,1)   ! r = A*ub
+
+      do i=1,n                       !        _
+         r(i)=-r(i)*mask(i)          ! r = -M*A*ub
+      enddo
+
+      call dssum  (r,nx1,ny1,nz1)    ! dssum rhs
+
+      call project1
+     $    (r,n,approx,napprox,h1,h2,mask,mult,ifwt,ifvec,name6)
+
+      tol = abs(tli)
+      p22=param(22)
+      param(22)=abs(tol)
+      if (nel.eq.nelv) then
+        call hmhzpf (name,u,r,h1,h2,mask,mult,imsh,tol,maxi,isd,binvm1)
+      else
+        call hmhzpf (name,u,r,h1,h2,mask,mult,imsh,tol,maxi,isd,bintm1)
+      endif
+      param(22)=p22
+
+      call project2
+     $     (u,n,approx,napprox,h1,h2,mask,mult,ifwt,ifvec,name6)
+
+      call add2(u,ub,n)
+
+      return
+      end
+C=======================================================================                                                                            
