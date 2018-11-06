@@ -3,6 +3,25 @@ convert gmsh .msh (version 2, ascii format) to nek .re2 file
 only support 3D mesh
 Haomin Yuan, 9/17/2018.
 
+
+notes about compilation
+
+1. before compilation of gmsh2nek
+in
+/Nek5000/tools/makefile
+
+add
+
+          if [ "$$i" == "gmsh2nek" ]; then       \
+             export FFLAGS+=" ${R8}" ;           \
+             if [ ! -z $(DOALL) ]; then          \
+                continue;                        \
+             fi ;                                \
+          fi ;                                   \
+
+to the end of exo2nek part.
+		  
+
 notes about usage
 1. for volume elements, only hex20/hex27 elements. 
 Physical tags are needed for volume elements to be dumped out by gmsh
