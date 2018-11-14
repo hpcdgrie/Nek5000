@@ -35,7 +35,7 @@ c----------------------------------------------------------------------
       write(6,*) '2: assume hybrid tetra4 and wedge6 mesh'
       write(6,*) '    all tetra4 elements in block 1 (or first block)'
       write(6,*) '    all wedge6 elements in block 2 (or second block)'
-      write(6,*) '3: assume hybrid hex20, tetra10 and wedge15 mesh'
+      write(6,*) '3: assume hybrid hex8, tetra4 and wedge6 mesh'
       write(6,*) '    all tetra4 elements in block 1 (or first block)'
       write(6,*) '    all hex8   elements in block 2 (or second block)'
       write(6,*) '    all wedge6 elements in block 3 (or third block)'
