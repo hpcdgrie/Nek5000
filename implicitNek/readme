@@ -75,7 +75,17 @@ so no guarantee this solver is free of problems.
 
 
 USAGE NOTE:
+1. in .usr file
+
+put 
+#include "implicit/nek_implicit.f"
+in the first line.
+
+copy 'implicit' folder to case folder
+
+
 1. pn-pn is a must
 2. no characteristic scheme, ie ifchar=False
 3. no moving mesh
+
 
