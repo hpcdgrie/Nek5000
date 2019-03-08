@@ -84,8 +84,8 @@ in the first line.
 copy 'implicit' folder to case folder
 
 
-1. pn-pn is a must
-2. no characteristic scheme, ie ifchar=False
-3. no moving mesh
+2. pn-pn is a must
+3. no characteristic scheme, ie ifchar=False
+4. no moving mesh
 
 
