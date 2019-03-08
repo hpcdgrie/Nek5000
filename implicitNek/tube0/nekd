@@ -1,0 +1,27 @@
+echo $1        >  SESSION.NAME
+echo `pwd`'/' >>  SESSION.NAME
+touch $1.rea
+rm ioinfo
+mv $1.log.$2 $1.log1.$2
+mv $1.his $1.his1
+mv $1.sch $1.sch1
+rm $1.output
+rm *.cobaltlog
+rm *.output
+rm *.error
+rm logfile
+rm xxt_map.rea
+rm logfile
+touch $1.log.$2
+ln $1.log.$2 $1.output
+ln $1.log.$2 logfile
+#qsub -n $2 --mode c32 -A CFDSim -q Q.prod-short -t 2:00:00 -O `pwd`'/'$1 nek5000
+qsub -n $2 --mode c32 -A MoltenSalt  -t 1:00:00 -O `pwd`'/'$1 nek5000
+
+sleep 4
+#qstat -f
+
+###
+### cqsub -n $2 -m vn -p ThermalStriping -q prod -e BG_MAPPING=TXYZ:DCMF_COLLECTIVES=0 -t 1:30:00 -O `pwd`'/'$1 nek5000 &
+### cqsub -n $2 -m vn -p Reactor_Modeling -q prod-devel -t 1:00:00 -O `pwd`'/'$1 nek5000 &
+### cqsub -n $2 -m vn -p THModeling -q prod-devel -t 1:00:00 -O `pwd`'/'$1 nek5000 &

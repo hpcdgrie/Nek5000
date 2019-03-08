@@ -1,0 +1,11 @@
+c
+c     time lag term for implicit solver
+c     these terms are only updated at igeom=1.
+c     when igeom > 1,  these terms are not updated.
+c
+      real*8 bfx_tlag(lx1,ly1,lz1,lelv),
+     $ bfy_tlag(lx1,ly1,lz1,lelv),
+     $ bfz_tlag(lx1,ly1,lz1,lelv),
+     $ bq_tlag(lx1,ly1,lz1,lelt,ldimt)
+	 
+      common /IMPLICIT/ bfx_tlag,bfy_tlag,bfz_tlag,bq_tlag

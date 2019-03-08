@@ -1,0 +1,9 @@
+2019-03-08 19:13:02.599 (INFO ) [0x4000122bde0] ibm.runjob.AbstractOptions: using properties file /bgsys/local/etc/bg.properties
+2019-03-08 19:13:02.600 (INFO ) [0x4000122bde0] ibm.runjob.AbstractOptions: max open file descriptors: 65536
+2019-03-08 19:13:02.600 (INFO ) [0x4000122bde0] ibm.runjob.AbstractOptions: core file limit: 18446744073709551615
+2019-03-08 19:13:02.601 (INFO ) [0x4000122bde0] 40967:tatu.runjob.client: scheduler job id is 1768683
+2019-03-08 19:13:02.607 (INFO ) [0x40000c334e0] 40967:tatu.runjob.monitor: monitor started
+2019-03-08 19:13:06.750 (INFO ) [0x40000c334e0] 40967:tatu.runjob.monitor: task record 2965852 created
+2019-03-08 19:13:06.751 (INFO ) [0x4000122bde0] CET-00000-33331-512:40967:ibm.runjob.client.options.Parser: set local socket to runjob_mux from properties file
+2019-03-08 19:13:13.521 (INFO ) [0x40000c334e0] 40967:tatu.runjob.monitor: tracklib completed
+2019-03-08 19:13:23.775 (INFO ) [0x4000122bde0] CET-00000-33331-512:2951524:ibm.runjob.client.Job: job 2951524 started

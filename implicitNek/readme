@@ -1,0 +1,81 @@
+based on Nek5000 v19
+
+Haomin Yuan, 3/8/2019
+
+implement a "pseudo convection term implicit" solver to Nek5000.
+
+In current Nek5000, convection term (in pressure-velocity eqns and passive scalar eqns)
+is explicitly extrapolated from previous time steps.
+And convection term  does not change even increase ngeom.
+
+This brings great disadvantages when pressure-velocity eqns are in strong coupling with passive scalar eqns.
+
+For example, in low-mach approximation, enthalpy eqn (1st passive scalar) does effect properties (density and viscosity)
+in a very strong fashion. Thus, pressure-velocity eqns and enthalpy eqn should be iterated several times in one time-step.
+And convection term should be updated in each iteration.
+
+Another example is with turbulence model. 
+for both k-epsilon or k-omega, 2nd and 3rd passive scalar eqn are used. 
+And turbulence viscosity is updated, and affect pressure-velocity eqns.
+Thus multiple iterations should be implemented to improve stability.
+
+WHAT ARE CHANGED FROM OFFICIAL SOLVER:
+
+1. advance_implicit() should replace advance() in "drive1.f" nek__multi_advance
+c-----------------------------------------------------------------------
+      subroutine nek__multi_advance(kstep,msteps)
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      do i=1,msteps
+         istep = istep+i
+c         call nek_advance
+         call nek_advance_implicit
+
+         if (ifneknekc) then 
+            call neknek_exchange
+            call bcopy
+            call chk_outflow
+         endif
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
+
+2. in nek_advance_implicit
+
+in official solver ngeom is default to be 2.
+at igeom = 1, explicit term are calculated.
+explicit term includes part of time derivative term and convective term.
+convective term is explicit extrapolated using AB scheme from previous time step.
+
+at igeom = 2, implicit term are constructed. And velocities/pressure/PS are solved.
+explicit term includes rest part of time derivative term and diffusion term.
+
+in nek_advance_implicit, ngeom should at least be 3. 
+at igeom =1,2, it does the same thing of the official solver.
+
+at igeom =3 or larger, convective term is updated with new velocity.
+but time derivative term  from old time steps are not changed.
+Then explicit term are recalculated.
+And implicit term are reconstructed.
+And velocities/pressure/PS are resolved.
+
+Thus a "pseudo convection term implicit" solver is constructed.
+
+IMPORTANT NOTES:
+
+1. only a periodic tube case is tested.
+data from "implicit solver " and official solver are matching
+
+2. more test cases should be done. 
+so no guarantee this solver is free of problems.
+
+
+USAGE NOTE:
+1. pn-pn is a must
+2. no characteristic scheme, ie ifchar=False
+3. no moving mesh
+
