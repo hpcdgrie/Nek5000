@@ -191,14 +191,14 @@ C----------------------------------------------------------------------
 
       if(igeom.eq.1) tmakf=tmakf+(dnekclock()-etime1)
 
-      ntot = lx1*ly1*lz1*NELV
-      var_max = glmax(bfz_tlag,ntot)
-      var_min = glmin(bfz_tlag,ntot)
-      if(nio.eq.0) write(6,*) "bfz_tlag min/max",var_min,"-",var_max 
+c      ntot = lx1*ly1*lz1*NELV
+c      var_max = glmax(bfx_tlag,ntot)
+c      var_min = glmin(bfx_tlag,ntot)
+c      if(nio.eq.0) write(6,*) "bfx_tlag min/max",var_min,"-",var_max 
 	  
-      var_max = glmax(bfz,ntot)
-      var_min = glmin(bfz,ntot)
-      if(nio.eq.0) write(6,*) "bfz min/max",var_min,"-",var_max 
+c      var_max = glmax(bfx,ntot)
+c      var_min = glmin(bfx,ntot)
+c      if(nio.eq.0) write(6,*) "bfx min/max",var_min,"-",var_max 
 	  
 	  
       return

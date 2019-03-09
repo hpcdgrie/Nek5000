@@ -185,13 +185,13 @@ C     !! NOTE: Do not change the content of the array BQ until the current
 	  
       if(igeom.eq.1) tmakq=tmakq+(dnekclock()-etime0)
 
-      var_max = glmax(bq_tlag(1,1,1,1,ifield-1),ntot)
-      var_min = glmin(bq_tlag(1,1,1,1,ifield-1),ntot)
-      if(nio.eq.0) write(6,*) "bq_tlag ",ifield," min/max",var_min,"-",var_max 
+c      var_max = glmax(bq_tlag(1,1,1,1,ifield-1),ntot)
+c      var_min = glmin(bq_tlag(1,1,1,1,ifield-1),ntot)
+c      if(nio.eq.0) write(6,*) "bq_tlag ",ifield," min/max",var_min,"-",var_max 
 	  
-      var_max = glmax(bq(1,1,1,1,ifield-1),ntot)
-      var_min = glmin(bq(1,1,1,1,ifield-1),ntot)
-      if(nio.eq.0) write(6,*) "bq ",ifield," min/max",var_min,"-",var_max 
+c      var_max = glmax(bq(1,1,1,1,ifield-1),ntot)
+c      var_min = glmin(bq(1,1,1,1,ifield-1),ntot)
+c      if(nio.eq.0) write(6,*) "bq ",ifield," min/max",var_min,"-",var_max 
 	  
       return
       end
