@@ -2033,7 +2033,8 @@
       do iel = 1,num_elem
         do ifc = 1,2*num_dim
           ch3 = cbc(ifc,iel)
-          if (ch3.eq.'EXO') then
+          if (ch3.ne.'   ') then
+          !if (ch3.eq.'EXO') then
             buf2(1)=iel
             buf2(2)=ifc
             call copy   (buf2(3),bc(1,ifc,iel),5)
