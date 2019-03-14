@@ -14,9 +14,7 @@ c
       integer totalNode,totalQuad,totalHex,totalElem
       integer num_dim,num_elem
  
-      real    node_xyz(3,max_num_elem*10)         ! node coordinates xyz, for each hex, there are 8 nodes, declare 10 for redundant.
-      integer node_quad(4,max_num_elem*10)        ! quad contains this node, node_quad(1-4,inode), this array is used to for faster boundary setting
-      integer node_hex(8,max_num_elem*10)         ! hex contains this node, node_hex(1-8,inode), this array is used to for faster boundary setting
+      real    node_xyz(3,max_num_elem)         ! node coordinates xyz
       integer quad_array(11,max_num_elem)   ! 1, physical entity, 2, geometrical entity, 3-11, quad9 nodes number
       integer hex_array(29,max_num_elem)     ! 1, physical entity, 2, geometrical entity, 3-29, hex27 nodes number
       integer hex_face_array(6,max_num_elem) ! 1-6, face pointer to quad number, if 0, not quad is assosiate to this face
@@ -51,7 +49,6 @@ c
 
       common /INPUT2/ quad_array,hex_array,hex_face_array
 
-      common /INPUT3/ bc,curve,node_xyz,node_quad,
-     &                node_hex,xm1,ym1,zm1
+      common /INPUT3/ bc, curve, node_xyz,xm1,ym1,zm1
 
       common /INPUT4/ cbc, ccurve, mshname, re2name

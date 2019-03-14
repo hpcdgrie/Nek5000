@@ -5,24 +5,6 @@ c trying to add periodicity setting when doing mesh converting.
 c and set boundary condition direct in 
 c casename.bc 
 c Haomin Yuan. 9/24/18
-c
-c update: 
-c 1.
-c modified the boundary set up part. 
-c old scheme is very slow when element number gets large. 
-c old scheme is O(N^2)
-c new scheme is much faster.
-c new scheme store the information of node - > hex.
-c thus, for each quad, only need to search nearby hex to setup boundaries.
-c new scheme is O(N)
-c
-c 2.
-c optimize memory usage of arrays. in msh file, node number is greatly 
-c larger than quad and hex numbers. its array size for nodes is now
-c 10 times of array size of quad and hex.
-c
-c Haomin Yuan. 3/14/2019
-c
 c-----------------------------------------------------------------------
       program gmsh2nek
 #     include "SIZE"
@@ -113,8 +95,8 @@ c read all nodes xyz
 1010  read(299,*) totalNode
       read(300,*)
 
-      if(totalNode.gt.(max_num_elem*10)) then
-       write(6,*) 'ERROR, increase MAXNEL to ',totalNode/10+1
+      if(totalNode.gt.max_num_elem) then
+       write(6,*) 'ERROR, increase MAXNEL to ',totalNode
        write(6,*) 'and recompile gmsh2nek'
        call exit(1)
       endif
@@ -125,9 +107,6 @@ c read all nodes xyz
       read(300,*)
       enddo
 c end read all nodes xyz
-
-      call rzero(node_quad,4*max_num_elem*10) ! node -> quad
-      call rzero(node_hex,8*max_num_elem*10)  ! node -> hex
 
       read(299,*)charline ! "$EndNodes"
       read(300,*)
@@ -152,10 +131,6 @@ c end read all nodes xyz
      &quad_array(7,totalQuad),quad_array(8,totalQuad),
      &quad_array(9,totalQuad),quad_array(10,totalQuad)
 
-      do inode = 1,4
-      call addTo_node_quad(quad_array(2+inode,totalQuad),totalQuad)
-      enddo
- 
       elseif (elemType.eq.10) then ! if quad9
       totalQuad = totalQuad + 1
       read(300,*) A,B,C,
@@ -165,10 +140,6 @@ c end read all nodes xyz
      &quad_array(7,totalQuad),quad_array(8,totalQuad),
      &quad_array(9,totalQuad),quad_array(10,totalQuad),
      &quad_array(11,totalQuad)
-
-      do inode = 1,4
-      call addTo_node_quad(quad_array(2+inode,totalQuad),totalQuad)
-      enddo 
 	 
       elseif (elemType.eq.17) then ! if hex20
       totalHex = totalHex + 1
@@ -185,10 +156,6 @@ c end read all nodes xyz
      &hex_array(19,totalHex),hex_array(20,totalHex),
      &hex_array(21,totalHex),hex_array(22,totalHex)
 	 
-      do inode = 1,8
-      call addTo_node_hex(hex_array(2+inode,totalHex),totalHex)
-      enddo
-
       elseif (elemType.eq.12) then ! if hex27
       totalHex = totalHex + 1
       read(300,*) A,B,C,
@@ -207,10 +174,6 @@ c end read all nodes xyz
      &hex_array(25,totalHex),hex_array(26,totalHex),
      &hex_array(27,totalHex),hex_array(28,totalHex),
      &hex_array(29,totalHex)
-
-      do inode = 1,8
-      call addTo_node_hex(hex_array(2+inode,totalHex),totalHex)
-      enddo
 
       else 
 c proceed to next line in file handle 300.
@@ -249,43 +212,9 @@ c proceed to next line in file handle 300.
       len = ltrunc(mshnam2,32)
       call chcopy(charlin1(4),mshnam2,len)
 	
-      call system(charline)
+      call system(charline)	
 
       return
-      end
-C-----------------------------------------------------------------
-      subroutine addTo_node_quad(inode,iquad)
-#     include "SIZE"
-      integer inode,iquad
-      integer iquadstart
-      iquadstart = 1
-
-      do i = 1,4
-        if(node_quad(i,inode).eq.0) then
-        iquadstart = i
-        node_quad(iquadstart,inode) = iquad
-        return
-        endif
-      enddo
-
-      return 
-      end
-C-----------------------------------------------------------------
-      subroutine addTo_node_hex(inode,ihex)
-#     include "SIZE"
-      integer inode,ihex
-      integer ihexstart
-      ihexstart = 1
-
-      do i = 1,8
-        if(node_hex(i,inode).eq.0) then
-        ihexstart = i
-        node_hex(ihexstart,inode) = ihex
-        return
-        endif
-      enddo
-
-      return 
       end
 C-----------------------------------------------------------------
       subroutine convert
@@ -304,14 +233,8 @@ c  Subroutine to convert gmsh hex20/hex27 to nek hex20/hex27 elements.
      &      /1,2,6,5,2,3,7,6,3,4,8,7,1,4,8,5,
      &       1,2,3,4,5,6,7,8/
  
-      integer fnode(4),quadnode(4),fhex(32),fhex_nd(32)
-      integer ihex,imshvert,inekvert
-      integer ifoundquad,imatch
-      integer physicalTag
-      integer iaddhex,addhex
-      logical ifnew
+      integer fnode(4),ihex,imshvert,inekvert,ifoundquad
 
-	  
       write(6,'(A)') ' '
       write(6,'(A)') 'Converting elements ... '
       do ihex = 1, totalHex
@@ -336,108 +259,27 @@ c if need to assigne boundary condition,
 c for each hex face, should search which quad is associate with it.
 c set bc's
 c only need to associate quad4 to hex8 faces.
-
       do ihex = 1, totalHex
         do iface = 1,6
           hex_face_array(iface,ihex) = 0
         enddo
       enddo
 
-C---- new scheme to search for boundaries.
-c---- because node_quad, and node_hex now contains information of this node.
-c node_quad((1-4),inode) contains the quad ids associate with this inode
-c node_hex((1-8),inode) contains the hex ids associate with this inode
-c this new scheme O(N) should be much faster than old scheme O(N^2)
-
-c search boundary using loop in all quads.
-      do iquad = 1,totalQuad
-         physicalTag = quad_array(1,iquad)
-	                !quad_array(2,iquad) ! or  geometrical tag
-	     do inode = 1,4
-          quadnode(inode) = quad_array(inode+2,iquad) ! first 4 nodes of quad
-         enddo
-
-C find all hexes that share the same nodes of this quad
-         call rzero(fhex,32)
-         call rzero(fhex_nd,32)
-         iaddhex = 0
-         do inode = 1,4
-            do ihex = 1,8
-               ! find all hex id related to the nodes in this quad.
-			   ! there will be duplicated hex id 
-               if(node_hex(ihex,quadnode(inode)).gt.0) then
-               iaddhex = iaddhex + 1
-               fhex(iaddhex) = node_hex(ihex,quadnode(inode))
-               endif
+      do ihex = 1, totalHex
+        do iface = 1,6
+            ! obtain node id for this face.
+            do ifnode = 1,4
+            fnode(ifnode)=hex_array(hex_face_node(ifnode,iface)+2,ihex)
             enddo
-         enddo
-
-c fhex(32) contains all hexes that share the same nodes of this quad.
-c now, only need to loop over this fhex(32) to find which hex face correspond to this quad.
-c however, there are duplicated hex id in fhex(32)
-C eliminate duplicated hex id in fhex, and store to fhex_nd
-
-       addhex = iaddhex
-       iaddhex_nd = 1
-       fhex_nd(1) = fhex(1)
-       do iaddhex1 = 2,addhex  ! loop in fhex 
-            ifnew = .TRUE.
-            do iaddhex2 =1,iaddhex_nd ! loop in fhex_nd
-			! if duplicate hex id, ifnew = false
-            if(fhex(iaddhex1).eq.fhex_nd(iaddhex2)) ifnew=.FALSE.		
-            enddo
-            if(ifnew) then
-              iaddhex_nd = iaddhex_nd + 1
-              fhex_nd(iaddhex_nd) = fhex(iaddhex1)
+            !input fnode, return quad elements number iquad
+            call findquad(fnode,ifoundquad)   ! ifoundquad is the matching quad number
+                                              ! ifoundquad is 0 if no quad element find
+            if(ifoundquad.ne.0) then
+            hex_face_array(iface,ihex) = quad_array(1,ifoundquad) ! physical tag
+                                         !quad_array(2,ifoundquad) ! geometrical tag
             endif
-       enddo
-
-c look over in fhex_nd to find 
-c which hex which face is corresponding to this quad
-
-       do iaddhex = 1,iaddhex_nd
-         ihex = fhex_nd(iaddhex) ! hex id that are related to the nodes of quad
-         do iface = 1,6       ! loop all faces
-         do ifnode = 1,4
-         fnode(ifnode)=hex_array(hex_face_node(ifnode,iface)+2,ihex)
-         enddo
-			  ! fnode is the node ids of hex face
-			  ! quadnode is the node ids of quad
-         call ifquadmatch(imatch,fnode,quadnode)
-         ! write(6,*) imatch 
-         if(imatch.eq.1) then ! if match. jump out.
-c         write(6,*) 'found hex face for quad id ',iquad 
-         goto 1040
-         endif
-         enddo
-       enddo
-
-c if no hex face is found for this quad, report error
-      write(6,*) 'ERROR: cannot find hex face for quad id ',iquad
-      write(6,*) 'ERROR: this should not happen, please check your mesh'
-      write(6,*) 'ERROR: or your mesh exporting process in gmsh'
-
-c assign physical tag to hex face
-1040  hex_face_array(iface,ihex) = physicalTag
+        enddo
       enddo
-
-C---- old scheme to search for boundary setup
-C---- this is very slow O(N^2) scheme. 	  
-c      do ihex = 1, totalHex
-c        do iface = 1,6
-c            ! obtain node id for this face.
-c            do ifnode = 1,4
-c            fnode(ifnode)=hex_array(hex_face_node(ifnode,iface)+2,ihex)
-c            enddo
-c            !input fnode, return quad elements number iquad
-c            call findquad(fnode,ifoundquad)   ! ifoundquad is the matching quad number
-c                                              ! ifoundquad is 0 if no quad element find
-c            if(ifoundquad.ne.0) then
-c            hex_face_array(iface,ihex) = quad_array(1,ifoundquad) ! physical tag
-c                                         !quad_array(2,ifoundquad) ! geometrical tag
-c            endif
-c        enddo
-c      enddo
 
 cc assign dummy boundary condition and id to bc array	  
       do ihex = 1, totalHex
