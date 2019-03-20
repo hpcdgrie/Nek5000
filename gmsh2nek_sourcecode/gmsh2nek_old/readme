@@ -1,6 +1,8 @@
 gmsh2nek
-convert gmsh .msh (version 2, ascii/binary format) to nek .re2 file
+convert gmsh .msh (version 2, ascii format, turn off 'Save all elements and Save parametric coordinates') to nek .re2 file
 only support 3D mesh
+Haomin Yuan, 9/17/2018.
+
 
 notes about compilation
 

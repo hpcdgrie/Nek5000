@@ -1,0 +1,87 @@
+GFORTRAN module version '10' created from mod_SIZE.f90
+MD5:39adff5de0f5ab8f7f8fcda9f795cf35 -- If you edit this, you'll get what you deserve.
+
+(() () () () () () () () () () () () () () () () () () () () () () () ()
+() () ())
+
+()
+
+()
+
+()
+
+()
+
+()
+
+(2 'bc' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
+EXPLICIT-SAVE 0 0 ALLOCATABLE DIMENSION) (REAL 8 0 0 0 REAL ()) 0 0 () (
+3 0 DEFERRED () () () () () ()) 0 () () () 0 0)
+3 'cbc' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
+EXPLICIT-SAVE 0 0 ALLOCATABLE DIMENSION) (CHARACTER 1 0 0 0 CHARACTER (
+(CONSTANT (INTEGER 4 0 0 0 INTEGER ()) 0 '3'))) 0 0 () (2 0 DEFERRED ()
+() () ()) 0 () () () 0 0)
+4 'ccurve' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
+EXPLICIT-SAVE 0 0 ALLOCATABLE DIMENSION) (CHARACTER 1 0 0 0 CHARACTER (
+(CONSTANT (INTEGER 4 0 0 0 INTEGER ()) 0 '1'))) 0 0 () (2 0 DEFERRED ()
+() () ()) 0 () () () 0 0)
+5 'curve' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
+EXPLICIT-SAVE 0 0 ALLOCATABLE DIMENSION) (REAL 8 0 0 0 REAL ()) 0 0 () (
+3 0 DEFERRED () () () () () ()) 0 () () () 0 0)
+6 'hex_array' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
+EXPLICIT-SAVE 0 0 ALLOCATABLE DIMENSION) (INTEGER 4 0 0 0 INTEGER ()) 0
+0 () (2 0 DEFERRED () () () ()) 0 () () () 0 0)
+7 'hex_face_array' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC
+UNKNOWN EXPLICIT-SAVE 0 0 ALLOCATABLE DIMENSION) (INTEGER 4 0 0 0
+INTEGER ()) 0 0 () (2 0 DEFERRED () () () ()) 0 () () () 0 0)
+8 'mshname' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
+UNKNOWN 0 0) (CHARACTER 1 0 0 0 CHARACTER ((CONSTANT (INTEGER 4 0 0 0
+INTEGER ()) 0 '32'))) 0 0 () () 0 () () () 0 0)
+9 'node_hex' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
+EXPLICIT-SAVE 0 0 ALLOCATABLE DIMENSION) (INTEGER 4 0 0 0 INTEGER ()) 0
+0 () (2 0 DEFERRED () () () ()) 0 () () () 0 0)
+10 'node_quad' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC
+UNKNOWN EXPLICIT-SAVE 0 0 ALLOCATABLE DIMENSION) (INTEGER 4 0 0 0
+INTEGER ()) 0 0 () (2 0 DEFERRED () () () ()) 0 () () () 0 0)
+11 'node_xyz' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
+EXPLICIT-SAVE 0 0 ALLOCATABLE DIMENSION) (REAL 8 0 0 0 REAL ()) 0 0 () (
+2 0 DEFERRED () () () ()) 0 () () () 0 0)
+12 'num_dim' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
+UNKNOWN 0 0) (INTEGER 4 0 0 0 INTEGER ()) 0 0 () () 0 () () () 0 0)
+13 'num_elem' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
+UNKNOWN 0 0) (INTEGER 4 0 0 0 INTEGER ()) 0 0 () () 0 () () () 0 0)
+14 'quad_array' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC
+UNKNOWN EXPLICIT-SAVE 0 0 ALLOCATABLE DIMENSION) (INTEGER 4 0 0 0
+INTEGER ()) 0 0 () (2 0 DEFERRED () () () ()) 0 () () () 0 0)
+15 're2name' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
+UNKNOWN 0 0) (CHARACTER 1 0 0 0 CHARACTER ((CONSTANT (INTEGER 4 0 0 0
+INTEGER ()) 0 '80'))) 0 0 () () 0 () () () 0 0)
+16 'size' 'size' '' 1 ((MODULE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
+UNKNOWN 0 0) (UNKNOWN 0 0 0 0 UNKNOWN ()) 0 0 () () 0 () () () 0 0)
+17 'totalelem' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC
+UNKNOWN UNKNOWN 0 0) (INTEGER 4 0 0 0 INTEGER ()) 0 0 () () 0 () () () 0
+0)
+18 'totalhex' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
+UNKNOWN 0 0) (INTEGER 4 0 0 0 INTEGER ()) 0 0 () () 0 () () () 0 0)
+19 'totalnode' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC
+UNKNOWN UNKNOWN 0 0) (INTEGER 4 0 0 0 INTEGER ()) 0 0 () () 0 () () () 0
+0)
+20 'totalquad' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC
+UNKNOWN UNKNOWN 0 0) (INTEGER 4 0 0 0 INTEGER ()) 0 0 () () 0 () () () 0
+0)
+21 'xm1' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
+EXPLICIT-SAVE 0 0 ALLOCATABLE DIMENSION) (REAL 8 0 0 0 REAL ()) 0 0 () (
+4 0 DEFERRED () () () () () () () ()) 0 () () () 0 0)
+22 'ym1' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
+EXPLICIT-SAVE 0 0 ALLOCATABLE DIMENSION) (REAL 8 0 0 0 REAL ()) 0 0 () (
+4 0 DEFERRED () () () () () () () ()) 0 () () () 0 0)
+23 'zm1' 'size' '' 1 ((VARIABLE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
+EXPLICIT-SAVE 0 0 ALLOCATABLE DIMENSION) (REAL 8 0 0 0 REAL ()) 0 0 () (
+4 0 DEFERRED () () () () () () () ()) 0 () () () 0 0)
+)
+
+('bc' 0 2 'cbc' 0 3 'ccurve' 0 4 'curve' 0 5 'hex_array' 0 6
+'hex_face_array' 0 7 'mshname' 0 8 'node_hex' 0 9 'node_quad' 0 10
+'node_xyz' 0 11 'num_dim' 0 12 'num_elem' 0 13 'quad_array' 0 14 're2name'
+0 15 'size' 0 16 'totalelem' 0 17 'totalhex' 0 18 'totalnode' 0 19
+'totalquad' 0 20 'xm1' 0 21 'ym1' 0 22 'zm1' 0 23)
