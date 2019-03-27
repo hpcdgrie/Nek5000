@@ -55,17 +55,17 @@ c-----------------------------------------------------------------------
             call geneig  (igeom)
          endif
 
+         call setup_convect(2)  ! reset convection velocity
+
+         if (ifheat)          call heat_im (igeom)
+
          if (igeom.ge.2) then  
             call setprop
             call rzero(qtl,ntot)
             if (iflomach) call qthermal
          endif
 
-         call setup_convect(2)  ! reset convection velocity
-
-         if (ifheat)          call heat_im (igeom)
          if (ifflow)          call fluid_im (igeom)
-         !if (ifflow)          call fluid(igeom)
          if (igeom.eq.ngeom.and.filterType.eq.1)
      $                        call q_filter(param(103))
 
