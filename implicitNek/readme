@@ -87,5 +87,5 @@ copy 'implicit' folder to case folder
 2. pn-pn is a must
 3. no characteristic scheme, ie ifchar=False
 4. no moving mesh
-
+5. use 2nd order time scheme
 
