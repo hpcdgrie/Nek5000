@@ -12,7 +12,6 @@ option 3: assume hybrid hex20, tetra10 and wedge15 mesh'
           all wedge6 elements in block 3 (or third block)'
 		  
 exo2nek_moreoptions_v19.f90 for v19
-however, not tested, be careful.
 option 1: assume pure hex20 mesh, original exo2nek'
 option 2: assume hybrid tetra10 and wedge15 mesh'
 		  all tetra4 elements in block 1 (or first block)'
