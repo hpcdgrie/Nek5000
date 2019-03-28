@@ -21,3 +21,13 @@ option 3: assume hybrid hex20, tetra10 and wedge15 mesh'
           all tetra4 elements in block 1 (or first block)'
           all hex8   elements in block 2 (or second block)'
           all wedge6
+		  
+
+Could also use a .bc file to set boundary conditions
+		  
+1                                  ! number of non-periodic boundary condition
+7 W                                ! sideset number, boundary condition
+3 1e-6                             ! number of pairs of periodic boundary condition, tolerence
+1 2 0.0 0.0 10.0                   ! sideset 1 mapping to sideset 2, with vector (0.0,0.0,10.0)
+3 4 0.86602540378 -0.5 0.0         ! sideset 3 mapping to sideset 4, with vector (0.86602540378,-0.5,0.0)
+5 6 -0.86602540378 -0.5 0.0        ! sideset 5 mapping to sideset 6, with vector (-0.86602540378,-0.5,0.0)
