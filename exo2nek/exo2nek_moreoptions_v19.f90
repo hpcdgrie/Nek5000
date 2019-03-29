@@ -327,10 +327,7 @@
       save vert_index_exo
       save iel_nek,iel_exo,ifc_exo
 
-      do i=1,6*num_elem
-      exoss(i,1)=0
-      enddo
-
+      call rzero_int(exoss,6*max_num_elem)
 ! store sideset information
       if (num_side_sets.ne.0) then
       write(6,'(a)') ''
@@ -363,9 +360,8 @@
 
 !  assume block 1 (or 1st block) contains all tet4 elements
 !  assume block 2 (or 2nd block) contains all wedge6 elements
-
+      call rzero_int(hexss,6*8) 
       tetnumber  = num_elem_in_block(1)
-
       vert_index_exo = 0
       iel_nek = 0
       do iel_exo = 1, num_elem  
@@ -392,7 +388,7 @@
        call average2vec(tetver(1,10),tetver(1,3),tetver(1,4))
 
 !  assign sideset to tet elements
-       call rzero(tetss,4)
+       call rzero_int(tetss,4)
        if (num_side_sets.ne.0) then
         do ifc_exo=1,4
          tetss(ifc_exo) = 0
@@ -449,7 +445,7 @@
       wedgever(1,6))
 
 !  assign sideset to wedge elements
-       call rzero(wedgess,5)
+       call rzero_int(wedgess,5)
        if (num_side_sets.ne.0) then
         do ifc_exo=1,5
           wedgess(ifc_exo) = exoss(ifc_exo,iel_exo)
@@ -524,6 +520,7 @@
       save vert_index_exo
       save iel_nek,iel_exo,ifc_exo
 
+      call rzero_int(exoss,6*max_num_elem)
 ! store sideset information
       if (num_side_sets.ne.0) then
       write(6,'(a)') ''
@@ -551,8 +548,7 @@
       call rzero (bc,5*2*num_dim*num_elem*8)
       call blank (cbc,3*2*num_dim*num_elem*8)
 
-      call rzero(hexss,6*8) 
- 
+      call rzero_int(hexss,6*8) 
       tetnumber  = num_elem_in_block(1) ! all exo tet elements in block 1 (or first block)
       ehexnumber = num_elem_in_block(2) ! all exo hex elements in block 2 (or second block)
       wedgenumber = num_elem_in_block(3) ! all exo wedge elements in block 3 (or third block)
@@ -585,7 +581,7 @@
 	   
 	   
 !  assign sideset to tet elements
-       call rzero(tetss,4)
+       call rzero_int(tetss,4)
        if (num_side_sets.ne.0) then
         do ifc_exo=1,4
           tetss(ifc_exo) = exoss(ifc_exo,iel_exo)
@@ -637,7 +633,7 @@
        call average2vec(ehexver(1,20),ehexver(1,5),ehexver(1,8))
 
 !  assign sideset
-       call rzero(ehexss,6)
+       call rzero_int(ehexss,6)
        if (num_side_sets.ne.0) then
         do ifc_exo=1,6
           ehexss(ifc_exo) = exoss(ifc_exo,iel_exo)
@@ -693,7 +689,7 @@
 
 
 !  assign sideset to wedge elements
-       call rzero(wedgess,5)
+       call rzero_int(wedgess,5)
        if (num_side_sets.ne.0) then
         do ifc_exo=1,5
           wedgess(ifc_exo) = exoss(ifc_exo,iel_exo)
@@ -2370,4 +2366,10 @@
  100     A(I ) = 0.0
       return
       END
-
+!-----------------------------------------------------------------------
+      subroutine rzero_int(a,n)
+      integer A(1)
+      DO 100 I = 1, N
+ 100     A(I) = 0
+      return
+      END
