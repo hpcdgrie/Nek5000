@@ -213,6 +213,6 @@ Physical Surface("side3", 5) = {241, 275};
 //+
 Physical Surface("side4", 6) = {117, 95};
 //+
-Physical Surface("pin", 7) = {183, 253, 139, 43, 73, 99, 285, 1, 121, 161, 205, 227, 263};
+Physical Surface("pin", 7) = {183, 253, 139, 43, 73, 99, 285, 121, 161, 205, 227, 263};
 //+
 Physical Volume("fluid", 8) = {4, 1, 6, 3, 2, 5, 7, 8, 9, 12, 11, 10};

@@ -3,39 +3,31 @@
 
       use SIZE
 
-      integer option,usr_dim,aorb
-
-      call read_input_name            ! read input name
-
-      write(6,*) 'Please input mesh dimension:'
-      write(6,*) '2: for 2d mesh (must at z=0 plane, ASCII file)'
-      write(6,*) '3: for 3d mesh'
-      read (5,'(I1)') usr_dim
+      integer option
+      write(6,*) 'Note: gmsh msh file must be version 2 format'
+      write(6,*) 'Please input options: (1) 2D (2) 3D '
+      read (5,'(I1)') option
  
-      if (usr_dim.eq.2) then
-         write(6,*) 'reading 2D ASCII msh file'
+      if (option.eq.1) then
+         call read_input_name
+		 if(aorb.eq.0) then
          call gmsh_read_2d_ascii
+         elseif(aorb.eq.1) then
+         call gmsh_read_2d_binary
+         endif
          call convert_2d
          call setbc_2d
-      elseif(usr_dim.eq.3) then
-         write(6,*) 'Please input option:'
-         write(6,*) '1: ASCII file'
-         write(6,*) '2: binary file'      
-         read (5,'(I1)') aorb
-         if(aorb.eq.1) then
-            write(6,*) 'reading 3D ASCII msh file'
-            call gmsh_read_3d_ascii
-         elseif(aorb.eq.2) then
-            write(6,*) 'reading 3D binary msh file'
-            call gmsh_read_3d_binary
-         else
-         write(6,*) 'Unknown option for gmsh2nek, ABORT.'
-         STOP
+      elseif(option.eq.2) then
+         call read_input_name
+         if(aorb.eq.0) then
+         call gmsh_read_3d_ascii
+         elseif(aorb.eq.1) then
+         call gmsh_read_3d_binary
          endif
          call convert_3d
          call setbc_3d
       else
-        write(6,*) 'Unknown dimension input. only 2/3 are allowed'
+        write(6,*) 'Unknown input option'
         STOP
       endif
 
@@ -47,7 +39,10 @@
       subroutine read_input_name
 
       use SIZE
-
+      character*80 charline
+      real A
+      integer B
+	  
       character(1) re2nam1(80)
       character(1) mshnam1(32)
       character(32) fname
@@ -69,6 +64,12 @@
       call blank (re2name, 80)
       call chcopy (mshname,mshnam1,len+4)
       call chcopy (re2name,re2nam1,len+4)
+
+      open(301,file=mshname)
+      read(301,*) charline
+      read(301,*) A,aorb,B
+      close(301)
+! aorb indicates ascii or binary file
 	  
       return 
       end
@@ -113,17 +114,39 @@
 
       write(6,*) 'Starting reading ',mshname
 
+! loop to find $PhysicalNames
+      do while (.true.) 
+        read(299,*) charline
+        read(300,*)
+        charline = trim(charline)
+        if (charline.eq."$PhysicalNames") goto 1010
+      enddo
+! end loop to $PhysicalNames
+1010  read(299,*) bcNumber ! bcNumber is number of boundaries
+      read(300,*)
+      bcNumber	= bcNumber - 1 
+      allocate ( bcID       (2,bcNumber))
+      allocate ( bcChar     (bcNumber))
+      call rzero_int(bcID,2*bcNumber)
+      call blank  (bcChar, 32*bcNumber)
+
+      do ibc= 1,bcNumber
+      read(299,*) A,bcID(1,ibc),bcChar(ibc)
+      read(300,*)
+      !write(6,*) trim(bcChar(ibc)),bcID(1,ibc)
+      enddo
+	  
 ! loop to find Nodes section
       do while (.true.) 
         read(299,*) charline
         read(300,*)
         charline = trim(charline)
-        if (charline.eq."$Nodes") goto 1010
+        if (charline.eq."$Nodes") goto 1020
       enddo
 ! end loop to "$Nodes"
 
 ! read all nodes xyz
-1010  read(299,*) totalNode
+1020  read(299,*) totalNode
       read(300,*)
 
 ! now we know total node number, allocate memory size.
@@ -173,6 +196,12 @@
       call addTo_node_line(line_array(2+inode,totalLine),totalLine)
       enddo
  
+      do ibc= 1,bcNumber
+        if(line_array(1,totalLine).eq.bcID(1,ibc)) then
+          bcID(2,ibc) =   bcID(2,ibc) + 1
+        endif
+      enddo
+
       elseif (elemType.eq.16) then ! if quad8
       totalQuad = totalQuad + 1
       read(300,*) A,B,C, &
@@ -185,7 +214,7 @@
       do inode = 1,4
       call addTo_node_quad(quad_array(2+inode,totalQuad),totalQuad)
       enddo
- 
+  
       elseif (elemType.eq.10) then ! if quad9
       totalQuad = totalQuad + 1
       read(300,*) A,B,C,&
@@ -236,6 +265,229 @@
       return
       end
 !-----------------------------------------------------------------------
+      subroutine gmsh_read_2d_binary
+! read .msh file (version 2, binary format)
+! 2d mesh
+      use SIZE
+
+      character*1   singlechar(100)
+      character*100 charline
+ 	  logical ifbswap
+      integer idummy(100),buf(100),buf1(100)
+      integer bone,nlength
+      integer elem_type,num_elm_follow,num_tags
+      integer fileid
+	 
+      fileid = 302
+	  
+	  ! read msh file in binary format.
+      open(unit=fileid,file=mshname,access="stream",form="unformatted",status="old")
+      write(6,*) 'binary format'
+      write(6,*) 'Starting reading ',mshname
+	  
+      ! read two lines.
+! ------------------------------------------------------------------
+      call bread_line(fileid,singlechar,nlength)
+      call bread_line(fileid,singlechar,nlength)
+
+! 1. test little or big endian.	  
+! if binary one,  then no need to bit swap, ifbswap = false
+! if not binray one, then need to bit swap, ifbswap = true
+
+      read(fileid) bone
+      read(fileid) singlechar(1)  ! move cursor to next line
+      if (bone.eq.1) then
+       ifbswap = .false.
+       write(6,*)  "no switch endian"
+      else
+       ifbswap = .true.
+       write(6,*)  "switch endian"
+      endif	   
+
+! loop to find $PhysicalNames
+      do while (.true.) 
+         call bread_line(fileid,singlechar,nlength)
+         call blank (charline,100)
+         call chcopy(charline,singlechar,nlength-1)
+         charline = trim(charline)
+         if (charline.eq."$PhysicalNames") goto 1010
+      enddo
+! end loop to $PhysicalNames
+1010  call bread_line(fileid,singlechar,nlength) !bcNumber is number of boundaries
+      call blank (charline,100)
+      call chcopy(charline,singlechar,nlength-1)
+      charline = trim(charline)
+      read(charline,*) bcNumber  
+      bcNumber	= bcNumber - 1 
+      allocate ( bcID       (2,bcNumber))
+      allocate ( bcChar     (bcNumber))
+      call rzero_int(bcID,2*bcNumber)
+      call blank  (bcChar, 32*bcNumber)
+
+      do ibc= 1,bcNumber
+      call bread_line(fileid,singlechar,nlength) !bcNumber is number of boundaries
+      call blank (charline,100)
+      call chcopy(charline,singlechar,nlength-1)
+      charline = trim(charline)
+      read(charline,*) A,bcID(1,ibc),bcChar(ibc)
+      !write(6,*) trim(bcChar(ibc)),bcID(1,ibc)
+      enddo
+	  
+! 2. loop lines to $Node
+! loop to find Nodes section
+      do while (.true.) 
+         call bread_line(fileid,singlechar,nlength)
+         call blank (charline,100)
+         call chcopy(charline,singlechar,nlength-1)
+         charline = trim(charline)
+         if (charline.eq."$Nodes") goto 1130
+      enddo
+! end loop to "$Nodes"
+1130     call bread_line(fileid,singlechar,nlength) ! read node number
+         call blank (charline,100)
+         call chcopy(charline,singlechar,nlength-1)
+         charline = trim(charline)
+         read(charline,*) totalNode  ! convert char to int
+
+! allocate memory size for node array
+      allocate ( node_xyz       (3,totalNode))
+      allocate ( node_line      (2,totalNode))
+      allocate ( node_quad      (4,totalNode))	  
+      call rzero(node_xyz,      3*totalNode)
+      call rzero_int(node_line,     2*totalNode) 
+      call rzero_int(node_quad,     4*totalNode)
+
+! 2. Get total node number, loop all nodes
+      do inode = 1,totalNode
+      read(fileid) idummy(1),node_xyz(1,inode),node_xyz(2,inode)&
+      ,node_xyz(3,inode)
+      if(ifbswap) then
+          call endian_swap_8(node_xyz(1,inode))
+          call endian_swap_8(node_xyz(2,inode))
+          call endian_swap_8(node_xyz(3,inode))  
+      endif
+      enddo
+
+      read(fileid) singlechar(1) ! move cursor to next line
+! jump $EndNodes
+      call bread_line(fileid,singlechar,nlength)
+! jump $Elements		 
+      call bread_line(fileid,singlechar,nlength)
+! read totalElem		 
+      call bread_line(fileid,singlechar,nlength)
+      call blank (charline,100)
+      call chcopy(charline,singlechar,nlength-1)
+      charline = trim(charline)
+      read(charline,*) totalElem
+
+      allocate ( line_array       (5,totalElem))
+      allocate ( quad_array       (11,totalElem))
+      call rzero_int(line_array,      5*totalElem)
+      call rzero_int(quad_array,      11*totalElem)
+
+      totalLine = 0
+      totalQuad = 0
+
+      do while (.true.) 
+      read(fileid) elem_type,num_elm_follow, num_tags
+
+	    if (elem_type.eq.8) then ! if line3
+          do iLine= 1,num_elm_follow
+          totalLine = totalLine + 1
+          read(fileid) idummy(1),&
+          line_array(1,totalLine),line_array(2,totalLine),&
+          line_array(3,totalLine),line_array(4,totalLine),&
+          line_array(5,totalLine)
+
+          if(ifbswap) then
+            do i = 1,5
+              call endian_swap_4(line_array(i,totalLine))
+            enddo
+          endif
+		  
+          do inode = 1,2
+          call addTo_node_line(line_array(2+inode,totalLine),totalLine)
+          enddo
+ 
+          do ibc= 1,bcNumber
+           if(line_array(1,totalLine).eq.bcID(1,ibc)) then
+             bcID(2,ibc) =   bcID(2,ibc) + 1
+           endif
+          enddo
+
+          enddo
+	   elseif (elem_type.eq.16) then ! quad 8
+	       do iQuad= 1,num_elm_follow
+           totalQuad = totalQuad + 1
+           read(fileid) idummy(1),&
+           quad_array(1,totalQuad),quad_array(2,totalQuad),&
+           quad_array(3,totalQuad),quad_array(4,totalQuad),&
+           quad_array(5,totalQuad),quad_array(6,totalQuad),&
+           quad_array(7,totalQuad),quad_array(8,totalQuad),&
+           quad_array(9,totalQuad),quad_array(10,totalQuad)
+
+           if(ifbswap) then
+             do i = 1,10
+               call endian_swap_4(quad_array(i,totalQuad))
+             enddo
+           endif
+
+           do inode = 1,4
+             call addTo_node_quad(quad_array(2+inode,totalQuad),totalQuad)
+           enddo
+
+           enddo
+       elseif (elem_type.eq.10) then ! quad 9
+	       do iQuad= 1,num_elm_follow
+           totalQuad = totalQuad + 1
+           read(fileid) idummy(1),&
+           quad_array(1,totalQuad),quad_array(2,totalQuad),&
+           quad_array(3,totalQuad),quad_array(4,totalQuad),&
+           quad_array(5,totalQuad),quad_array(6,totalQuad),&
+           quad_array(7,totalQuad),quad_array(8,totalQuad),&
+           quad_array(9,totalQuad),quad_array(10,totalQuad),&
+           quad_array(11,totalQuad)
+		
+           if(ifbswap) then
+             do i = 1,11
+               call endian_swap_4(quad_array(i,totalQuad))
+             enddo
+           endif
+
+           do inode = 1,4
+             call addTo_node_quad(quad_array(2+inode,totalQuad),totalQuad)
+           enddo
+
+           enddo
+      else
+       ! unknown element type 
+       ! only line3 and quad8/9 elements are accepted.
+	    write (6,*) 'ERRPOR: unknown element type'
+        write (6,*) 'only line3 and quad8/9 elements are accepted'
+        write (6,*) 'please choose "set order 2" option to set all elements to 2nd order'
+        write (6,*) 'please uncheck "save all elements" when exporting mesh'
+        write (6,*) 'please see readme for more information'
+        STOP
+      endif 
+
+      if((totalQuad+totalLine).eq.totalElem) goto 1180
+      enddo
+
+! close file
+1180  close(fileid)
+
+      write (6,*) 'total node number is ', totalNode
+      write (6,*) 'total line element number is ', totalLine
+      write (6,*) 'total quad element number is ', totalQuad
+
+      write(6,*) 'Done:: reading ',mshname  
+
+      num_dim = 2
+      num_elem = totalQuad
+ 
+      return
+      end
+!-----------------------------------------------------------------------
       subroutine gmsh_read_3d_ascii
 ! read .msh file (version 2, ascii format)
 ! 3d mesh, ascii
@@ -274,19 +526,42 @@
       open(299,file=mshname)
       open(300,file=mshnam2)
 
+      write(6,*) 'ASCII format'
       write(6,*) 'Starting reading ',mshname
+
+! loop to find $PhysicalNames
+      do while (.true.) 
+        read(299,*) charline
+        read(300,*)
+        charline = trim(charline)
+        if (charline.eq."$PhysicalNames") goto 1010
+      enddo
+! end loop to $PhysicalNames
+1010  read(299,*) bcNumber ! bcNumber is number of boundaries
+      read(300,*)
+      bcNumber	= bcNumber - 1 
+      allocate ( bcID       (2,bcNumber))
+      allocate ( bcChar     (bcNumber))
+      call rzero_int(bcID,2*bcNumber)
+      call blank  (bcChar, 32*bcNumber)
+
+      do ibc= 1,bcNumber
+      read(299,*) A,bcID(1,ibc),bcChar(ibc)
+      read(300,*)
+      !write(6,*) trim(bcChar(ibc)),bcID(1,ibc)
+      enddo
 
 ! loop to find Nodes section
       do while (.true.) 
         read(299,*) charline
         read(300,*)
         charline = trim(charline)
-        if (charline.eq."$Nodes") goto 1010
+        if (charline.eq."$Nodes") goto 1020
       enddo
 ! end loop to "$Nodes"
 
 ! read all nodes xyz
-1010  read(299,*) totalNode
+1020  read(299,*) totalNode
       read(300,*)
 
 ! now we know total node number, allocate memory size.
@@ -339,6 +614,12 @@
       do inode = 1,4
       call addTo_node_quad(quad_array(2+inode,totalQuad),totalQuad)
       enddo
+	    
+      do ibc= 1,bcNumber
+        if(quad_array(1,totalQuad).eq.bcID(1,ibc)) then
+          bcID(2,ibc) =   bcID(2,ibc) + 1
+        endif
+      enddo
  
       elseif (elemType.eq.10) then ! if quad9
       totalQuad = totalQuad + 1
@@ -353,6 +634,12 @@
       do inode = 1,4
       call addTo_node_quad(quad_array(2+inode,totalQuad),totalQuad)
       enddo 
+	  
+      do ibc= 1,bcNumber
+        if(quad_array(1,totalQuad).eq.bcID(1,ibc)) then
+          bcID(2,ibc) =   bcID(2,ibc) + 1
+        endif
+      enddo
 	 
       elseif (elemType.eq.17) then ! if hex20
       totalHex = totalHex + 1
@@ -451,6 +738,7 @@
 	  
 	  ! read msh file in binary format.
       open(unit=fileid,file=mshname,access="stream",form="unformatted",status="old")
+      write(6,*) 'binary format'
       write(6,*) 'Starting reading ',mshname
 	  
       ! read two lines.
@@ -472,6 +760,35 @@
        write(6,*)  "switch endian"
       endif	   
 
+! loop to find $PhysicalNames
+      do while (.true.) 
+         call bread_line(fileid,singlechar,nlength)
+         call blank (charline,100)
+         call chcopy(charline,singlechar,nlength-1)
+         charline = trim(charline)
+         if (charline.eq."$PhysicalNames") goto 1010
+      enddo
+! end loop to $PhysicalNames
+1010  call bread_line(fileid,singlechar,nlength) !bcNumber is number of boundaries
+      call blank (charline,100)
+      call chcopy(charline,singlechar,nlength-1)
+      charline = trim(charline)
+      read(charline,*) bcNumber  
+      bcNumber	= bcNumber - 1 
+      allocate ( bcID       (2,bcNumber))
+      allocate ( bcChar     (bcNumber))
+      call rzero_int(bcID,2*bcNumber)
+      call blank  (bcChar, 32*bcNumber)
+
+      do ibc= 1,bcNumber
+      call bread_line(fileid,singlechar,nlength) !bcNumber is number of boundaries
+      call blank (charline,100)
+      call chcopy(charline,singlechar,nlength-1)
+      charline = trim(charline)
+      read(charline,*) A,bcID(1,ibc),bcChar(ibc)
+      write(6,*) trim(bcChar(ibc)),bcID(1,ibc)
+      enddo
+	  
 ! 2. loop lines to $Node
 ! loop to find Nodes section
       do while (.true.) 
@@ -486,7 +803,7 @@
          call blank (charline,100)
          call chcopy(charline,singlechar,nlength-1)
          charline = trim(charline)
-         read(charline,*) totalNode
+         read(charline,*) totalNode  ! convert char to int
 
 ! allocate memory size for node array
       allocate ( node_xyz       (3,totalNode))
@@ -552,6 +869,12 @@
            do inode = 1,4
              call addTo_node_quad(quad_array(2+inode,totalQuad),totalQuad)
            enddo
+		   
+           do ibc= 1,bcNumber
+             if(quad_array(1,totalQuad).eq.bcID(1,ibc)) then
+             bcID(2,ibc) =   bcID(2,ibc) + 1
+             endif
+           enddo
 
            enddo
        elseif (elem_type.eq.10) then ! quad 9
@@ -574,7 +897,13 @@
            do inode = 1,4
              call addTo_node_quad(quad_array(2+inode,totalQuad),totalQuad)
            enddo
-        
+
+           do ibc= 1,bcNumber
+             if(quad_array(1,totalQuad).eq.bcID(1,ibc)) then
+             bcID(2,ibc) =   bcID(2,ibc) + 1
+             endif
+           enddo
+
            enddo
 	  elseif (elem_type.eq.17) then ! if hex20
 	       do iHex= 1,num_elm_follow
@@ -663,57 +992,6 @@
       return
       end
 !-----------------------------------------------------------------------
-      subroutine addTo_node_line(inode,iline)
-      use SIZE
-      integer inode,iline
-      integer ilinestart
-      ilinestart = 1
-
-      do i = 1,2
-        if(node_line(i,inode).eq.0) then
-        ilinestart = i
-        node_line(ilinestart,inode) = iline
-        return
-        endif
-      enddo
-
-      return 
-      end
-!-----------------------------------------------------------------------
-      subroutine addTo_node_quad(inode,iquad)
-      use SIZE
-      integer inode,iquad
-      integer iquadstart
-      iquadstart = 1
-
-      do i = 1,4
-        if(node_quad(i,inode).eq.0) then
-        iquadstart = i
-        node_quad(iquadstart,inode) = iquad
-        return
-        endif
-      enddo
-
-      return 
-      end
-!-----------------------------------------------------------------
-      subroutine addTo_node_hex(inode,ihex)
-      use SIZE
-      integer inode,ihex
-      integer ihexstart
-      ihexstart = 1
-
-      do i = 1,8
-        if(node_hex(i,inode).eq.0) then
-        ihexstart = i
-        node_hex(ihexstart,inode) = ihex
-        return
-        endif
-      enddo
-
-      return 
-      end
-!-----------------------------------------------------------------
       subroutine convert_2d
 !  Subroutine to convert gmsh quad8/quad9 to nek  quad8/quad9 elements.
       use SIZE
@@ -780,6 +1058,9 @@
       call blank (cbc,3*2*num_dim*num_elem)
 
 !---- search for boundaries, based on physical tags of line elements
+!---- use old scheme
+!---- because usually 2d mesh will not be too large.
+!---- so this should be enough for 2d mesh, and it is guaranteed to work.
       do iQuad = 1,totalQuad
         do iline = 1,4
             ! obtain node id for this line on this quad.
@@ -816,79 +1097,6 @@
       return
       end
 !-----------------------------------------------------------------
-      subroutine findline(lnode,ifoundline)
-      use SIZE
-      integer lnode(2),ifoundline,iline
-      integer linenode(2),imatch
-
-      ifoundline = 0
-      iline= 0
-      imatch = 0
-! loop over all quad to find the quad has the fnode numbers.
-
-      do iline = 1,totalLine
-
-         do inode = 1,2
-          linenode(inode) = line_array(inode+2,iline)
-         enddo
-
-         call iflinematch(imatch,lnode,linenode)
-
-         if(imatch.eq.1) then
-          ifoundline = iline
-          return
-         endif
-      enddo
-
-      return
-      end
-!--------------------------------------------------------------------
-      subroutine iflinematch(imatch,lnode,linenode)
-      integer lnode(2),linenode(2)
-      integer imatch
-
-      imatch = 0
-  
-      do ilnode = 1,2
-         do ilinenode = 1,2
-         if(lnode(ilnode).eq.linenode(ilinenode)) imatch=imatch+1
-         enddo
-      enddo
- 
-! imatch should equal 2 if lnode and linenode is matching.
-      if(imatch.eq.2) then
-       imatch = 1
-      else
-       imatch =0
-      endif
- 
-      return
-      end
-!-----------------------------------------------------------------
-      subroutine r_or_l_detect(quad,rfflag)
-! detect if iquad is right-hand or left-hand, elements
-      use SIZE
-      integer quad, rfflag
-      integer node(4)
-      real vec12(3),vec14(3),cz
-	  
-      do inode = 1,4
-         node(inode) = quad_array(inode+2,quad)
-      enddo
-
-      do i = 1,3
-	     vec12(i) = node_xyz(i,node(2)) - node_xyz(i,node(1))
-	     vec14(i) = node_xyz(i,node(4)) - node_xyz(i,node(1))
-      enddo
-	  
-      cz = vec12(1)*vec14(2) - vec12(2)*vec14(1)
-
-      if(cz.gt.0.0) rfflag = 0 ! right hand element
-      if(cz.lt.0.0) rfflag = 1 ! left hand element
-
-      return
-      end
-!-----------------------------------------------------------------
       subroutine convert_3d
 !
 !  Subroutine to convert gmsh hex20/hex27 to nek hex20/hex27 elements.
@@ -906,10 +1114,10 @@
             1,2,3,4,5,6,7,8/
  
       integer fnode(4),quadnode(4),fhex(32),fhex_nd(32)
-      integer ihex,imshvert,inekvert
+      integer ihex,imshvert,inekvert,iquad,iface,inode,ifnode
       integer ifoundquad,imatch
       integer physicalTag
-      integer iaddhex,addhex
+      integer iaddhex,addhex,iaddhex_nd,iaddhex1,iaddhex2
       logical ifnew
 
       allocate ( xm1              (3,3,3,num_elem))
@@ -930,7 +1138,7 @@
       enddo
       write(6,'(A)') 'Done :: Converting elements '  
 
-      write(6,*) 'Converting boundary conditions...' 
+      write(6,'(A)') 'Converting boundary conditions...' 
 ! zero-out bc and curve sides arrays
 
       allocate   (ccurve (4+8*(num_dim-2),num_elem) )
@@ -944,21 +1152,17 @@
       call blank (cbc,3*2*num_dim*num_elem)
 
 ! currently, does consider converting boundary condition now.
-! if need to assigne boundary condition,
-! for each hex face, should search which quad is associate with it.
-! set bc's
 ! only need to associate quad4 to hex8 faces.
-
+!
 !---- new scheme to search for boundaries.
 !---- because node_quad, and node_hex now contains information of this node.
 ! node_quad((1-4),inode) contains the quad ids associate with this inode
 ! node_hex((1-8),inode) contains the hex ids associate with this inode
 ! this new scheme O(N) should be much faster than old scheme O(N^2)
-
+!
 ! search boundary using loop in all quads.
       do iquad = 1,totalQuad
          physicalTag = quad_array(1,iquad)
-	                !quad_array(2,iquad) ! or  geometrical tag
 	     do inode = 1,4
           quadnode(inode) = quad_array(inode+2,iquad) ! first 4 nodes of quad
          enddo
@@ -968,12 +1172,12 @@
          call rzero_int(fhex_nd,32)
          iaddhex = 0
          do inode = 1,4
-            do ihex = 1,8
+            do i = 1,8
                ! find all hex id related to the nodes in this quad.
 			   ! there will be duplicated hex id 
-               if(node_hex(ihex,quadnode(inode)).gt.0) then
+               if(node_hex(i,quadnode(inode)).gt.0) then
                iaddhex = iaddhex + 1
-               fhex(iaddhex) = node_hex(ihex,quadnode(inode))
+               fhex(iaddhex) = node_hex(i,quadnode(inode))
                endif
             enddo
          enddo
@@ -990,7 +1194,7 @@
             ifnew = .TRUE.
             do iaddhex2 =1,iaddhex_nd ! loop in fhex_nd
 			! if duplicate hex id, ifnew = false
-            if(fhex(iaddhex1).eq.fhex_nd(iaddhex2)) ifnew=.FALSE.		
+             if(fhex(iaddhex1).eq.fhex_nd(iaddhex2)) ifnew=.FALSE.		
             enddo
             if(ifnew) then
               iaddhex_nd = iaddhex_nd + 1
@@ -1000,31 +1204,31 @@
 
 ! look over in fhex_nd to find 
 ! which hex which face is corresponding to this quad
-
+!
        do iaddhex = 1,iaddhex_nd
          ihex = fhex_nd(iaddhex) ! hex id that are related to the nodes of quad
          do iface = 1,6       ! loop all faces
-         do ifnode = 1,4
-         fnode(ifnode)=hex_array(hex_face_node(ifnode,iface)+2,ihex)
-         enddo
+           do ifnode = 1,4
+           fnode(ifnode)=hex_array(hex_face_node(ifnode,iface)+2,ihex)
+           enddo
 			  ! fnode is the node ids of hex face
 			  ! quadnode is the node ids of quad
-         call ifquadmatch(imatch,fnode,quadnode)
-         ! write(6,*) imatch 
-         if(imatch.eq.1) then ! if match. jump out.
-!         write(6,*) 'found hex face for quad id ',iquad 
-         goto 1040
-         endif
+           imatch = 0 
+           call ifquadmatch(imatch,fnode,quadnode)
+           if(imatch.eq.1) then
+             hex_face_array(iface,ihex) = physicalTag
+             if(hex_face_array(iface,ihex).eq.1) flag1 = flag1 +1
+		     goto 1100
+           endif
          enddo
        enddo
-
+!
 ! if no hex face is found for this quad, report error
       write(6,*) 'ERROR: cannot find hex face for quad id ',iquad
       write(6,*) 'ERROR: this should not happen, please check your mesh'
       write(6,*) 'ERROR: or your mesh exporting process in gmsh'
 
-! assign physical tag to hex face
-1040  hex_face_array(iface,ihex) = physicalTag
+1100  continue
       enddo
 
 !---- old scheme to search for boundary setup
@@ -1045,7 +1249,7 @@
 !        enddo
 !      enddo
 
-! assign dummy boundary condition and id to bc array	  
+! assign dummy boundary condition and id to bc array
       do ihex = 1, totalHex
         do iface = 1,6
          if(hex_face_array(iface,ihex).ne.0) then       ! if on boundary, with physical tag
@@ -1054,61 +1258,10 @@
          endif
         enddo
       enddo
-
-      write(6,*) 'Done::Converting boundary conditions' 
+      write(6,'(A)') 'Done::Converting boundary conditions' 
  
       return
       end
-!--------------------------------------------------------------------
-      subroutine findquad(fnode,ifoundquad)
-      use SIZE
-      integer fnode(4),ifoundquad,iquad
-      integer quadnode(4),imatch
-
-      ifoundquad = 0
-      iquad = 0
-      imatch = 0
-! loop over all quad to find the quad has the fnode numbers.
-
-      do iquad = 1,totalQuad
-
-         do inode = 1,4
-          quadnode(inode) = quad_array(inode+2,iquad)
-         enddo
-
-         call ifquadmatch(imatch,fnode,quadnode)
-
-         if(imatch.eq.1) then
-          ifoundquad = iquad
-          return
-         endif
-      enddo
-
-      return
-      end
-!--------------------------------------------------------------------
-      subroutine ifquadmatch(imatch,fnode,quadnode)
-      integer fnode(4),quadnode(4)
-      integer imatch
-
-      imatch = 0
-  
-      do ifnode = 1,4
-         do iquadnode = 1,4
-         if(fnode(ifnode).eq.quadnode(iquadnode)) imatch=imatch+1
-         enddo
-      enddo
- 
-! imatch should equal 4 if fnode and quadnode is matching.
-      if(imatch.eq.4) then
-       imatch = 1
-      else
-       imatch =0
-      endif
- 
-      return
-      end
-!-----------------------------------------------------------------
 !!-----------------------------------------------------------------
       subroutine setbc_2d
       use SIZE
@@ -1130,78 +1283,38 @@
       character*3 ubc
       integer tags(2),ibc,nbc,io
       integer ip,np,ipe,ipe2,nipe(2)
-      integer,save,allocatable,dimension(:,:) ::ptags
+      integer ptags(2)
       integer lnode(2)
-      real,save,allocatable,dimension(:,:) ::pvec 
+      real pvec(3)
       real fpxyz(3,2)
       real AB_v(3),AD_v(3),farea,product_v(3)
       real dist,distMax,ptol
-	  
-      character*32 bcname
-      character*1 bcnam1(32)
-      equivalence(bcname,bcnam1)
-	  
-      call blank (bcname,32)
 
-      len = ltrunc(mshname,32)
-      call chcopy(bcnam1,mshname,(len-3))
-      call chcopy(bcnam1(len-3),'.bc' , 3)
-      len = ltrunc(bcnam1,32)
-	  
-      open(301,file=bcname,err=1020)
-      write(6,*) 'Setting boundary condition from ',bcname(:len),' file' 
-
-      read(301,*,iostat=io) nbc
-      if(io.ne.0) then
-         write(6,*) bcname(:len),' file is empty ',&
-      'please set boundary condition in .usr file'
-         return
-      endif		   
-
-      do ibc = 1,nbc
-        call blank (ubc,3)
-        read(301,*) tags(1),ubc
-! not periodic boundary condition, direct set it up
-        write(6,*) 'setting ',ubc,' to surface ',tags(1)
-        do iquad = 1,totalQuad
-          do iline = 1,4
-            if(bc(5,iline,iquad).eq.tags(1)) then
-              cbc(iface,ihex) = ubc
-            endif
-          enddo
-        enddo
+! boundary condition summary
+      write(6,*) '******************************************************'
+      write(6,*) 'Boundary info summary'
+      write(6,*) 'BoundaryName     BoundaryID'
+      do ibc= 1,bcNumber
+      write(6,*) trim(bcChar(ibc)),bcID(1,ibc)
       enddo
+      write(6,*) '******************************************************'
+  
+      write(6,*) 'number of pairs of periodic surfaces'
+      read (5,'(I1)') nbc
+	  
+      if(nbc.le.0) return
+  
+      do ibc = 1,nbc 
+        ptol = 1e-5
+        write(6,*) 'input surface 1 and  surface 2  BoundaryID'
+        read (5,*) ptags(1),ptags(2)
+        write(6,*) 'input translation vector (surface 1 -> surface 2)'
+        read (5,*) pvec(1),pvec(2),pvec(3)
 
-      ip = 0
-      read(301,*,iostat=io) nbc,ptol ! nbc is the number of pairs of periodic boundary condition
-                           ! ptol is the tolerence used to search periodic boundary conditin
-      if(io.ne.0) then
-         write(6,*) 'No periodic boundary condition set.'
-         return
-      endif					
-
-! now, nbc is the number of pairs of periodic bc.
-! 
-      allocate ( ptags   (2,nbc)) 
-      allocate ( pvec    (3,nbc)) 
-
-      do ibc = 1,nbc
-	    ip = ip + 1
-        read(301,*) tags(1),tags(2),pvec(1,ip),pvec(2,ip),pvec(3,ip)
-! set periodic boundary condition.
-! read periodic mapping vector
-        ptags(1,ip) = tags(1)
-        ptags(2,ip) = tags(2)
-      enddo
-      close(301)
- 
-      write(6,*) 'Setting periodic boundary condition' 
-      np = ip
-      do ip = 1,np
           ipe = 0
           do iquad = 1,totalQuad
             do iline = 1,4
-               if(bc(5,iline,iquad).eq.ptags(1,ip)) then
+               if(bc(5,iline,iquad).eq.ptags(1)) then
                 ipe = ipe + 1
                 parray(1,1,ipe) = iquad
                 parray(2,1,ipe) = iline
@@ -1213,7 +1326,7 @@
           ipe = 0
 	      do iquad = 1,totalQuad
             do iline = 1,4
-               if(bc(5,iline,iquad).eq.ptags(2,ip)) then
+               if(bc(5,iline,iquad).eq.ptags(2)) then
                 ipe = ipe + 1
                 parray(1,2,ipe) = iquad
                 parray(2,2,ipe) = iline
@@ -1221,11 +1334,10 @@
             enddo
           enddo
           nipe(2) = ipe
-		  
-          write(6,*)'mapping surface',ptags(1,ip),'with',nipe(1),'lines'
-          write(6,*)'to surface',ptags(2,ip),'with',nipe(2),'lines'
 
           if(nipe(1).ne.nipe(2))  then
+            write(6,*)'mapping surface',ptags(1),'with',nipe(1),'lines'
+            write(6,*)'to surface',ptags(2),'with',nipe(2),'lines'
             write(6,*) 'EORROR, line numbers are not matching'
           endif
 
@@ -1271,9 +1383,9 @@
               fpxyz(3,2) = fpxyz(3,2) + node_xyz(3,lnode(ilnode))/2.0
               enddo
  
-              dist = sqrt((fpxyz(1,2) - fpxyz(1,1) - pvec(1,ip))**2 &
-       + (fpxyz(2,2) - fpxyz(2,1) - pvec(2,ip))**2 &
-       + (fpxyz(3,2) - fpxyz(3,1) - pvec(3,ip))**2)
+              dist = sqrt((fpxyz(1,2) - fpxyz(1,1) - pvec(1))**2 &
+       + (fpxyz(2,2) - fpxyz(2,1) - pvec(2))**2 &
+       + (fpxyz(3,2) - fpxyz(3,1) - pvec(3))**2)
  
                if(dist.lt.distMax) then 
                   distMax = dist
@@ -1285,18 +1397,12 @@
                   bc(2,iline2,iquad2) = iline*1.0
                   cbc(iline,iquad) = 'P  '
                   cbc(iline2,iquad2) = 'P  '
-!               write(6,*) ihex,iface,bc(1,iface,ihex),bc(2,iface,ihex)
-!          write(6,*) ihex2,iface2,bc(1,iface2,ihex2),bc(2,iface2,ihex2)
-!          write(6,*) fpxyz(1,1),fpxyz(2,1),fpxyz(3,1)
-!          write(6,*) fpxyz(1,2),fpxyz(2,2),fpxyz(3,2)
                   endif
                endif
              enddo
           enddo
 
           nperror = 0
-		  
-          write(6,*)'doing periodic check for surface',ptags(1,ip)
 
           do ipe = 1,nipe(1)
              iquad = parray(1,1,ipe)
@@ -1305,7 +1411,10 @@
                   nperror = nperror +1 
              endif
           enddo
-          if (nperror.gt.0) write(6,*) 'ERROR,',nperror,'faces did not map'
+          if (nperror.gt.0) then
+          write(6,*)'doing periodic check for surface',ptags(1)
+          write(6,*) 'ERROR,',nperror,'lines did not map'
+          endif
 
           nperror = 0
 
@@ -1317,42 +1426,24 @@
              iquad3 = int(bc(1,iline2,iquad2))
              iline3 = int(bc(2,iline2,iquad2))
              if ((iquad.ne.iquad3).or.(iline.ne.iline3)) then
-			 
-! for debug use only
-!
-!                write(6,*) 'ERROR,',ihex,iface,' map to ',ihex2,iface2
-!                write(6,*) 'but,',ihex2,iface2,' map to ',ihex3,iface3
-!
-!		     do ifnode = 1,4
-!         fnode(ifnode)=hex_face_node(ifnode,iface)
-!      write(6,*)xm1(fnode(ifnode),1,1,ihex),ym1(fnode(ifnode),1,1,ihex),
-!     & zm1(fnode(ifnode),1,1,ihex) 
-!             enddo
-!			 
-!		     do ifnode = 1,4
-!         fnode(ifnode)=hex_face_node(ifnode,iface2)
-!      write(6,*)xm1(fnode(ifnode),1,1,ihex2),
-!     & ym1(fnode(ifnode),1,1,ihex2),zm1(fnode(ifnode),1,1,ihex2) 
-!             enddo
-!
-!		     do ifnode = 1,4
-!         fnode(ifnode)=hex_face_node(ifnode,iface3)
-!      write(6,*)xm1(fnode(ifnode),1,1,ihex3),
-!     & ym1(fnode(ifnode),1,1,ihex3),zm1(fnode(ifnode),1,1,ihex3) 
-!             enddo
-
                 nperror = nperror + 1
              endif
           enddo		  
 
           if (nperror.gt.0) then
+          write(6,*)'doing periodic check for surface',ptags(1)
           write(6,*) 'ERROR,',nperror,'lines are wrong',&
       'out of total ',nipe(1),' lines'
           endif
       
       enddo
 
-1020  return
+      write(6,*) '******************************************************'
+      write(6,*) 'Please set boundary conditions to all non-periodic boundaries'
+      write(6,*) 'in .usr file usrdat2() subroutine'
+      write(6,*) '******************************************************'
+
+      return
       end
 !--------------------------------------------------------------------
       subroutine setbc_3d
@@ -1370,82 +1461,38 @@
       character*3 ubc
       integer tags(2),ibc,nbc,io
       integer ip,np,ipe,ipe2,nipe(2)
-      integer,save,allocatable,dimension(:,:) ::ptags
+      integer ptags(2)
       integer fnode(4)
-      real,save,allocatable,dimension(:,:) ::pvec 
+      real pvec(3)
       real fpxyz(3,2)
       real AB_v(3),AD_v(3),farea,product_v(3)
       real dist,distMax,ptol
-	  
-      character*32 bcname
-      character*1 bcnam1(32)
-      equivalence(bcname,bcnam1)
-	  
-      call blank (bcname,32)
-
-      len = ltrunc(mshname,32)
-      call chcopy(bcnam1,mshname,(len-3))
-      call chcopy(bcnam1(len-3),'.bc' , 3)
-      len = ltrunc(bcnam1,32)
-	  
-      open(301,file=bcname,err=1020)
-      write(6,*) 'Setting boundary condition from ',bcname(:len),' file' 
-
-      read(301,*,iostat=io) nbc
-      if(io.ne.0) then
-         write(6,*) bcname(:len),' file is empty ',&
-      'please set boundary condition in .usr file'
-         return
-      endif		   
-
-        do ibc = 1,nbc
-        call blank (ubc,3)
-        read(301,*) tags(1),ubc
-! not periodic boundary condition, direct set it up
-          write(6,*) 'setting ',ubc,' to surface ',tags(1)
-          do ihex = 1, totalHex
-            do iface = 1,6
-               if(bc(5,iface,ihex).eq.tags(1)) then
-                 cbc(iface,ihex) = ubc
-               endif
-            enddo
-          enddo
-      enddo
-      ip = 0
-      read(301,*,iostat=io) nbc,ptol ! nbc is the number of pairs of periodic boundary condition
-                           ! ptol is the tolerence used to search periodic boundary conditin
-      if(io.ne.0) then
-         write(6,*) 'No periodic boundary condition set.'
-         return
-      endif					
-
-! now, nbc is the number of pairs of periodic bc.
-! 
-      allocate ( ptags   (2,nbc)) 
-      allocate ( pvec    (3,nbc)) 
-
-!      if(nbc.gt.npbc_max) then
-!         write(6,*) 'ERROR: increase npbc_max to ',nbc
-!         return
-!      endif
-	  
-      do ibc = 1,nbc
-	    ip = ip + 1
-        read(301,*) tags(1),tags(2),pvec(1,ip),pvec(2,ip),pvec(3,ip)
-! set periodic boundary condition.
-! read periodic mapping vector
-        ptags(1,ip) = tags(1)
-        ptags(2,ip) = tags(2)
-      enddo
-      close(301)
  
-      write(6,*) 'Setting periodic boundary condition' 
-      np = ip
-      do ip = 1,np
+! boundary condition summary
+      write(6,*) '******************************************************'
+      write(6,*) 'Boundary info summary'
+      write(6,*) 'BoundaryName     BoundaryID'
+      do ibc= 1,bcNumber
+      write(6,*) trim(bcChar(ibc)),bcID(1,ibc)
+      enddo
+      write(6,*) '******************************************************'
+  
+      write(6,*) 'number of pairs of periodic surfaces'
+      read (5,'(I1)') nbc
+	  
+      if(nbc.le.0) return
+
+      do ibc = 1,nbc 
+        ptol = 1e-5
+        write(6,*) 'input surface 1 and  surface 2  BoundaryID'
+        read (5,*) ptags(1),ptags(2)
+        write(6,*) 'input translation vector (surface 1 -> surface 2)'
+        read (5,*) pvec(1),pvec(2),pvec(3)
+
           ipe = 0
           do ihex = 1, totalHex
             do iface = 1,6
-               if(bc(5,iface,ihex).eq.ptags(1,ip)) then
+               if(bc(5,iface,ihex).eq.ptags(1)) then   
                 ipe = ipe + 1
                 parray(1,1,ipe) = ihex
                 parray(2,1,ipe) = iface
@@ -1457,7 +1504,7 @@
           ipe = 0
 	      do ihex = 1, totalHex
             do iface = 1,6
-               if(bc(5,iface,ihex).eq.ptags(2,ip)) then
+               if(bc(5,iface,ihex).eq.ptags(2)) then
                 ipe = ipe + 1
                 parray(1,2,ipe) = ihex
                 parray(2,2,ipe) = iface
@@ -1465,11 +1512,10 @@
             enddo
           enddo
           nipe(2) = ipe
-		  
-          write(6,*)'maping surface',ptags(1,ip),'with',nipe(1),'faces'
-          write(6,*)'to surface',ptags(2,ip),'with',nipe(2),'faces'
 
           if(nipe(1).ne.nipe(2))  then
+            write(6,*)'maping surface',ptags(1),'with',nipe(1),'faces'
+            write(6,*)'to surface',ptags(2),'with',nipe(2),'faces'
             write(6,*) 'EORROR, face numbers are not matching'
           endif
 
@@ -1499,9 +1545,9 @@
                fpxyz(3,2) = fpxyz(3,2) + node_xyz(3,fnode(ifnode))/4.0
                enddo
                
-              dist = sqrt((fpxyz(1,2) - fpxyz(1,1) - pvec(1,ip))**2 &
-       + (fpxyz(2,2) - fpxyz(2,1) - pvec(2,ip))**2 &
-       + (fpxyz(3,2) - fpxyz(3,1) - pvec(3,ip))**2)
+              dist = sqrt((fpxyz(1,2) - fpxyz(1,1) - pvec(1))**2 &
+       + (fpxyz(2,2) - fpxyz(2,1) - pvec(2))**2 &
+       + (fpxyz(3,2) - fpxyz(3,1) - pvec(3))**2)
  
                if(dist.lt.distMax) then 
                   distMax = dist
@@ -1513,18 +1559,12 @@
                   bc(2,iface2,ihex2) = iface*1.0
                   cbc(iface,ihex) = 'P  '
                   cbc(iface2,ihex2) = 'P  '
-!               write(6,*) ihex,iface,bc(1,iface,ihex),bc(2,iface,ihex)
-!          write(6,*) ihex2,iface2,bc(1,iface2,ihex2),bc(2,iface2,ihex2)
-!          write(6,*) fpxyz(1,1),fpxyz(2,1),fpxyz(3,1)
-!          write(6,*) fpxyz(1,2),fpxyz(2,2),fpxyz(3,2)
                   endif
                endif
              enddo
           enddo
 
           nperror = 0
-		  
-          write(6,*)'doing periodic check for surface',ptags(1,ip)
 
           do ipe = 1,nipe(1)
              ihex = parray(1,1,ipe)
@@ -1533,8 +1573,10 @@
                   nperror = nperror +1 
              endif
           enddo
-          if (nperror.gt.0) write(6,*) 'ERROR,',nperror,'faces did not map'
-
+          if (nperror.gt.0) then
+          write(6,*)'doing periodic check for surface',ptags(1)
+          write(6,*) 'ERROR,',nperror,'faces did not map'
+          endif
           nperror = 0
 
           do ipe = 1,nipe(1)
@@ -1545,44 +1587,26 @@
              ihex3 = int(bc(1,iface2,ihex2))
              iface3 = int(bc(2,iface2,ihex2))
              if ((ihex.ne.ihex3).or.(iface.ne.iface3)) then
-			 
-! for debug use only
-!
-!                write(6,*) 'ERROR,',ihex,iface,' map to ',ihex2,iface2
-!                write(6,*) 'but,',ihex2,iface2,' map to ',ihex3,iface3
-!
-!		     do ifnode = 1,4
-!         fnode(ifnode)=hex_face_node(ifnode,iface)
-!      write(6,*)xm1(fnode(ifnode),1,1,ihex),ym1(fnode(ifnode),1,1,ihex),
-!     & zm1(fnode(ifnode),1,1,ihex) 
-!             enddo
-!			 
-!		     do ifnode = 1,4
-!         fnode(ifnode)=hex_face_node(ifnode,iface2)
-!      write(6,*)xm1(fnode(ifnode),1,1,ihex2),
-!     & ym1(fnode(ifnode),1,1,ihex2),zm1(fnode(ifnode),1,1,ihex2) 
-!             enddo
-!
-!		     do ifnode = 1,4
-!         fnode(ifnode)=hex_face_node(ifnode,iface3)
-!      write(6,*)xm1(fnode(ifnode),1,1,ihex3),
-!     & ym1(fnode(ifnode),1,1,ihex3),zm1(fnode(ifnode),1,1,ihex3) 
-!             enddo
-
                 nperror = nperror + 1
              endif
           enddo		  
 
           if (nperror.gt.0) then
+          write(6,*)'doing periodic check for surface',ptags(1)
           write(6,*) 'ERROR,',nperror,'faces are wrong',&
       'out of total ',nipe(1),' faces'
           endif
       
       enddo
 
-1020  return
+	  
+      write(6,*) '******************************************************'
+      write(6,*) 'Please set boundary conditions to all non-periodic boundaries'
+      write(6,*) 'in .usr file usrdat2() subroutine'
+      write(6,*) '******************************************************'
+	  
+      return
       end
-!--------------------------------------------------------------------
 !-----------------------------------------------------------------------
       subroutine deallocate_all_msh_arrays
 ! deallocate msh file related arrays
@@ -2172,3 +2196,192 @@
       return 
       end
 !-----------------------------------------------------------------------
+      subroutine addTo_node_line(inode,iline)
+      use SIZE
+      integer inode,iline
+      integer ilinestart
+      ilinestart = 1
+
+      do i = 1,2
+        if(node_line(i,inode).eq.0) then
+        ilinestart = i
+        node_line(ilinestart,inode) = iline
+        return
+        endif
+      enddo
+
+      return 
+      end
+!-----------------------------------------------------------------------
+      subroutine addTo_node_quad(inode,iquad)
+      use SIZE
+      integer inode,iquad
+      integer iquadstart
+      iquadstart = 1
+
+      do i = 1,4
+        if(node_quad(i,inode).eq.0) then
+        iquadstart = i
+        node_quad(iquadstart,inode) = iquad
+        return
+        endif
+      enddo
+
+      return 
+      end
+!-----------------------------------------------------------------
+      subroutine addTo_node_hex(inode,ihex)
+      use SIZE
+      integer inode,ihex
+      integer ihexstart
+      ihexstart = 1
+
+      do i = 1,8
+        if(node_hex(i,inode).eq.0) then
+        ihexstart = i
+        node_hex(ihexstart,inode) = ihex
+        return
+        endif
+      enddo
+
+      return 
+      end
+!-----------------------------------------------------------------
+      subroutine findline(lnode,ifoundline)
+      use SIZE
+      integer lnode(2),ifoundline,iline
+      integer linenode(2),imatch
+
+      ifoundline = 0
+      iline= 0
+      imatch = 0
+! loop over all quad to find the quad has the fnode numbers.
+
+      do iline = 1,totalLine
+
+         do inode = 1,2
+          linenode(inode) = line_array(inode+2,iline)
+         enddo
+
+         call iflinematch(imatch,lnode,linenode)
+
+         if(imatch.eq.1) then
+          ifoundline = iline
+          return
+         endif
+      enddo
+
+      return
+      end
+!--------------------------------------------------------------------
+      subroutine iflinematch(imatch,lnode,linenode)
+      integer lnode(2),linenode(2)
+      integer imatch
+
+      imatch = 0
+  
+      do ilnode = 1,2
+         do ilinenode = 1,2
+         if(lnode(ilnode).eq.linenode(ilinenode)) imatch=imatch+1
+         enddo
+      enddo
+ 
+! imatch should equal 2 if lnode and linenode is matching.
+      if(imatch.eq.2) then
+       imatch = 1
+      else
+       imatch =0
+      endif
+ 
+      return
+      end
+!-----------------------------------------------------------------
+      subroutine r_or_l_detect(quad,rfflag)
+! detect if iquad is right-hand or left-hand, elements
+      use SIZE
+      integer quad, rfflag
+      integer node(4)
+      real vec12(3),vec14(3),cz
+	  
+      do inode = 1,4
+         node(inode) = quad_array(inode+2,quad)
+      enddo
+
+      do i = 1,3
+	     vec12(i) = node_xyz(i,node(2)) - node_xyz(i,node(1))
+	     vec14(i) = node_xyz(i,node(4)) - node_xyz(i,node(1))
+      enddo
+	  
+      cz = vec12(1)*vec14(2) - vec12(2)*vec14(1)
+
+      if(cz.gt.0.0) rfflag = 0 ! right hand element
+      if(cz.lt.0.0) rfflag = 1 ! left hand element
+
+      return
+      end
+!--------------------------------------------------------------------
+      subroutine findquad(fnode,ifoundquad)
+      use SIZE
+      integer fnode(4),ifoundquad,iquad
+      integer quadnode(4),imatch
+
+      ifoundquad = 0
+      iquad = 0
+      imatch = 0
+! loop over all quad to find the quad has the fnode numbers.
+
+      do iquad = 1,totalQuad
+
+         do inode = 1,4
+          quadnode(inode) = quad_array(inode+2,iquad)
+         enddo
+
+         call ifquadmatch(imatch,fnode,quadnode)
+
+         if(imatch.eq.1) then
+          ifoundquad = iquad
+          return
+         endif
+      enddo
+
+      return
+      end
+!--------------------------------------------------------------------
+      subroutine ifquadmatch(imatch,fnode,quadnode)
+      integer fnode(4),quadnode(4)
+      integer imatch,imatch1,imatch2
+
+      imatch = 0
+      imatch1 = 0
+      do ifnode = 1,4
+         do iquadnode = 1,4
+         if(fnode(ifnode).eq.quadnode(iquadnode)) imatch1=imatch1+1
+         enddo
+      enddo
+ 
+! imatch should equal 4 if fnode and quadnode is matching.
+      if(imatch1.eq.4) then
+       imatch1 = 1
+      else
+       imatch1 =0
+      endif
+ 
+      imatch2 = 0
+      do iquadnode = 1,4
+         do ifnode = 1,4
+         if(fnode(ifnode).eq.quadnode(iquadnode)) imatch2=imatch2+1
+         enddo
+      enddo
+ 
+! imatch should equal 4 if fnode and quadnode is matching.
+      if(imatch2.eq.4) then
+       imatch2 = 1
+      else
+       imatch2 =0
+      endif
+	  
+       imatch = imatch1*imatch2
+ 
+      return
+      end
+!-----------------------------------------------------------------

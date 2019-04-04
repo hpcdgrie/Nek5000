@@ -1,0 +1,7 @@
+2d lid driven cavity
+
+surface 3 set to W in usr file
+number of pairs of periodicity
+1
+surface 1 -> surface 2 
+translation vector  1 1 0

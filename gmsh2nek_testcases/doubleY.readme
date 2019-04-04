@@ -1,0 +1,11 @@
+3d subchannel
+
+surface 7 set to W in usr file
+number of pairs of periodicity
+3
+surface 1 -> surface 2 
+translation vector  0.0 0.0 10.0 
+surface 3 -> surface 4
+translation vector  0.86602540378 -0.5 0.0 
+surface 5 -> surface 6
+translation vector  -0.86602540378 -0.5 0.0

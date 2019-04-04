@@ -1,6 +1,0 @@
-1                                  ! number of non-periodic boundary condition
-7 W                                ! physical tag number, boundary condition
-3 1e-6                             ! number of pairs of periodic boundary condition, tolerence
-1 2 0.0 0.0 10.0                   ! surface 1 mapping to surface 2, with vector (0.0,0.0,10.0)
-3 4 0.86602540378 -0.5 0.0         ! surface 3 mapping to surface 4, with vector (0.86602540378,-0.5,0.0)
-5 6 -0.86602540378 -0.5 0.0        ! surface 5 mapping to surface 6, with vector (-0.86602540378,-0.5,0.0)
