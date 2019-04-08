@@ -1,5 +1,5 @@
 gmsh2nek
-convert gmsh .msh (version 2, 3D ascii/binary mesh, or 2D ascii mesh) to nek .re2 file
+convert gmsh .msh (version 2, 2D/3D ascii/binary mesh) to nek .re2 file
 
 notes about compilation
 
@@ -31,13 +31,15 @@ Physical tags (surface number) are needed for all line elements to be dumped out
 
 3. for mesh dumping in gmsh
 make sure 'set order 2' are clicked
-make sure choose 'version 2 ascii' for 2D mesh
-make sure choose 'version 2 ascii/binary' for 3D mesh
+make sure choose 'version 2' when exporting mesh.
 make sure uncheck 'Save all elements' when exporting mesh
 make sure msh file with .msh extension
 
-4. For converted mesh, boundary conditions are actually set in nek .usr file
+4. periodic boundary condition should be set during gmsh2nek converting
+only translation periodicity is allowed. 
+user should input translation vector.
 
+5. For non-periodic boundaries, boundary conditions should be set in nek .usr file
 Please in include the following subroutines in usrdat2()
 
       do iel=1,nelv
@@ -54,20 +56,6 @@ Please in include the following subroutines in usrdat2()
       enddo
 
 id_face is the physical tags assigned to surface elements.
-
-5. You could also include a .bc file to direct assign boundary when doing gmsh2nek conversion
-please check doubleY.bc in gmsh2nek_testcases/
-
-doubleY.bc
-
-1                            ! number of non-periodic boundary condition
-7 W                          ! physical tag number, boundary condition (note for wall is 'W  ', inlet for 'v  ', etc)
-3 1e-6                       ! number of pairs of periodic boundary condition, tolerence
-1 2 0.0 0.0 10.0             ! surface 1 mapping to surface 2, with vector (0.0,0.0,10.0)
-3 4 0.86602540378 -0.5 0.0   ! surface 3 mapping to surface 4, with vector (0.86602540378,-0.5,0.0)
-5 6 -0.86602540378 -0.5 0.0  ! surface 5 mapping to surface 6, with vector (-0.86602540378,-0.5,0.0)
-                             ! mesh on periodic surface should be conformal.
-
 							 
 below is the update log from Author.							 
 ! gmsh2nek

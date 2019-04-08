@@ -48,7 +48,7 @@
       character(32) fname
 
       write(6,*) 'Input (.msh) file name:'
-      write(6,*) 'please make sure file has .msh extension, must be exported as version 2'
+      write(6,*) 'please make sure file has .msh extension'
       read (5,'(a32)') fname
       len = ltrunc(fname,32)
 
@@ -124,18 +124,21 @@
 ! end loop to $PhysicalNames
 1010  read(299,*) bcNumber ! bcNumber is number of boundaries
       read(300,*)
-      bcNumber	= bcNumber - 1 
+      !bcNumber	= bcNumber - 1 
       allocate ( bcID       (2,bcNumber))
       allocate ( bcChar     (bcNumber))
       call rzero_int(bcID,2*bcNumber)
       call blank  (bcChar, 32*bcNumber)
 
+      ibc_a = 0
       do ibc= 1,bcNumber
       read(299,*) A,bcID(1,ibc),bcChar(ibc)
       read(300,*)
       !write(6,*) trim(bcChar(ibc)),bcID(1,ibc)
+        if(A.EQ.1) ibc_a = ibc_a + 1
       enddo
-	  
+      bcNumber = ibc_a
+
 ! loop to find Nodes section
       do while (.true.) 
         read(299,*) charline
@@ -318,12 +321,12 @@
       call chcopy(charline,singlechar,nlength-1)
       charline = trim(charline)
       read(charline,*) bcNumber  
-      bcNumber	= bcNumber - 1 
+      !bcNumber	= bcNumber - 1 
       allocate ( bcID       (2,bcNumber))
       allocate ( bcChar     (bcNumber))
       call rzero_int(bcID,2*bcNumber)
       call blank  (bcChar, 32*bcNumber)
-
+      ibc_a = 0
       do ibc= 1,bcNumber
       call bread_line(fileid,singlechar,nlength) !bcNumber is number of boundaries
       call blank (charline,100)
@@ -331,7 +334,9 @@
       charline = trim(charline)
       read(charline,*) A,bcID(1,ibc),bcChar(ibc)
       !write(6,*) trim(bcChar(ibc)),bcID(1,ibc)
+        if(A.EQ.1) ibc_a = ibc_a + 1
       enddo
+      bcNumber = ibc_a
 	  
 ! 2. loop lines to $Node
 ! loop to find Nodes section
@@ -539,18 +544,19 @@
 ! end loop to $PhysicalNames
 1010  read(299,*) bcNumber ! bcNumber is number of boundaries
       read(300,*)
-      bcNumber	= bcNumber - 1 
+      !bcNumber	= bcNumber - 1 
       allocate ( bcID       (2,bcNumber))
       allocate ( bcChar     (bcNumber))
       call rzero_int(bcID,2*bcNumber)
       call blank  (bcChar, 32*bcNumber)
-
+      ibc_a = 0
       do ibc= 1,bcNumber
       read(299,*) A,bcID(1,ibc),bcChar(ibc)
       read(300,*)
       !write(6,*) trim(bcChar(ibc)),bcID(1,ibc)
+         if(A.EQ.2) ibc_a = ibc_a + 1
       enddo
-
+      bcNumber = ibc_a
 ! loop to find Nodes section
       do while (.true.) 
         read(299,*) charline
@@ -774,20 +780,22 @@
       call chcopy(charline,singlechar,nlength-1)
       charline = trim(charline)
       read(charline,*) bcNumber  
-      bcNumber	= bcNumber - 1 
+      !bcNumber	= bcNumber - 1 
       allocate ( bcID       (2,bcNumber))
       allocate ( bcChar     (bcNumber))
       call rzero_int(bcID,2*bcNumber)
       call blank  (bcChar, 32*bcNumber)
-
+      ibc_a = 0
       do ibc= 1,bcNumber
       call bread_line(fileid,singlechar,nlength) !bcNumber is number of boundaries
       call blank (charline,100)
       call chcopy(charline,singlechar,nlength-1)
       charline = trim(charline)
       read(charline,*) A,bcID(1,ibc),bcChar(ibc)
-      write(6,*) trim(bcChar(ibc)),bcID(1,ibc)
+      !write(6,*) trim(bcChar(ibc)),bcID(1,ibc)
+        if(A.EQ.2) ibc_a = ibc_a + 1
       enddo
+      bcNumber = ibc_a
 	  
 ! 2. loop lines to $Node
 ! loop to find Nodes section
