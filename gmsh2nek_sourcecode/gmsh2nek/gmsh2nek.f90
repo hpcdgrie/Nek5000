@@ -69,6 +69,12 @@
       read(301,*) charline
       read(301,*) A,aorb,B
       close(301)
+	  
+      if ((A.ge.3.0).or.(A.lt.2.0)) then
+      write(6,*) 'RRROR: msh file is not in version 2, ABORT'  
+      STOP
+      endif
+	  
 ! aorb indicates ascii or binary file
 	  
       return 
@@ -1308,7 +1314,7 @@
       write(6,*) '******************************************************'
   
       write(6,*) 'number of pairs of periodic surfaces'
-      read (5,'(I1)') nbc
+      read (5,*) nbc
 	  
       if(nbc.le.0) return
   
@@ -1486,7 +1492,7 @@
       write(6,*) '******************************************************'
   
       write(6,*) 'number of pairs of periodic surfaces'
-      read (5,'(I1)') nbc
+      read (5,*) nbc
 	  
       if(nbc.le.0) return
 
