@@ -4,8 +4,8 @@ convert gmsh .msh (version 2, 2D/3D ascii/binary mesh) to nek .re2 file
 notes about compilation
 
 1. before compilation of gmsh2nek
-in
-/Nek5000/tools/makefile
+for version 17:
+in /Nek5000/tools/makefile
 
 add
 
@@ -17,7 +17,17 @@ add
           fi ;                                   \
 
 to the end of exo2nek part.
-		  
+
+for version 19:
+in /Nek5000/tools/maketools.inc
+at line 177
+
+     if [ "$TOOL" == "exo2nek" ]; then
+        export FFLAGS+=" ${R8}"
+     fi
+     if [ "$TOOL" == "gmsh2nek" ]; then
+        export FFLAGS+=" ${R8}"
+     fi
 
 notes about usage
 
