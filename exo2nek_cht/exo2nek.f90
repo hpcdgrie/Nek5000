@@ -18,15 +18,7 @@
       character(32) fname
 
       write(6,*) 'Special exo2nek version for cht mesh'
-      write(6,*) 'Fluid blocks must be put before'
-      write(6,*) 'solid blocks in terms of block ID.'
-      write(6,*) 'Sidesets must be set for all boundaries,'
-      write(6,*) 'including fluid-solid interface surfaces.'
-      write(6,*) 'However, no sideset for solid-solid interface surfaces.'
-      write(6,*) 'Note: on one fluid-solid interface, there will be two surfaces:'
-      write(6,*) 'one surface for fluid block, one surface for solid block.'
-      write(6,*) 'Need to assign sideset for both surfaces, but no need to be '
-      write(6,*) 'the same sideset ID'
+      write(6,*) 'please read readme how to set sideset and bc'
 
       write(6,*) 'Input (.exo) file name:'
       read (5,'(A32)') fname
