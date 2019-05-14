@@ -9,16 +9,20 @@ note about usage:
 However, NO sideset given to fluid-fluid interface and solid-solid interface.
 
 3. example about sideset setup
-block 1 (fluid):  sideset 1 -> inlet
-                  sideset 2 -> outlet
-				  sideset 3 -> fluid-solid interface
-block 2 (fluid):  sideset 4 -> inlet
-                  sideset 5 -> outlet
-                  sideset 6 -> fluid-solid interface
-block 3 (solid):  sideset 7 -> insulate boundary
-                  sideset 8 -> fluid-solid interface
-bloci 4 (solid):  sideset 9 -> insulate boundary
-                  sideset 10 -> fluid-solid interface
+block 1 (fluid): 
+sideset 1 -> inlet
+sideset 2 -> outlet
+sideset 3 -> fluid-solid interface
+block 2 (fluid):  
+sideset 4 -> inlet
+sideset 5 -> outlet
+sideset 6 -> fluid-solid interface
+block 3 (solid):  
+sideset 7 -> insulate boundary
+sideset 8 -> fluid-solid interface
+bloci 4 (solid):  
+sideset 9 -> insulate boundary
+sideset 10 -> fluid-solid interface
 
 to set actual boundary conditions
 in usrdat2()
