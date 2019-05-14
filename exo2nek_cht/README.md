@@ -9,6 +9,7 @@ note about usage:
 However, NO sideset given to fluid-fluid interface and solid-solid interface.
 
 3. example about sideset setup
+
 block 1 (fluid): 
 sideset 1 -> inlet
 sideset 2 -> outlet
