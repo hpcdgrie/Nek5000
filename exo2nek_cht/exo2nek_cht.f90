@@ -413,7 +413,7 @@
 !  Write the header
       call blank   (hdr,80)    
       write(hdr,1) num_elem, num_dim, nfe
-    1 format('#v003',i9,i3,i9,' this is the hdr')
+    1 format('#v002',i9,i3,i9,' this is the hdr')
       call byte_write(hdr,20,ierr)         
       call byte_write(test,1,ierr)     ! write the endian discriminator
 
@@ -553,6 +553,7 @@
       enddo
       rbc = nbc
       call byte_write (rbc,2, ierr)
+      write(6,*) 'fluid boundary faces: ',nbc
 
       do iel = 1,nfe
         do ifc = 1,2*num_dim
@@ -588,6 +589,7 @@
       enddo
       rbc = nbc
       call byte_write (rbc,2, ierr)
+      write(6,*) 'thermal boundary faces: ',nbc
 
       do iel = 1,num_elem
         do ifc = 1,2*num_dim
