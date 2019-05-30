@@ -53,17 +53,17 @@ in usrdat2()
           ! set boundary for thermal field, should skip fluid-solid interface
           id_face2 = bc(5,ifc,iel,2)
           if (id_face2.eq.1) then 
-             cbc(ifc,iel,1) = 't  '
+             cbc(ifc,iel,2) = 't  '
           elseif (id_face2.eq.2) then
-             cbc(ifc,iel,1) = 'O  '
+             cbc(ifc,iel,2) = 'O  '
 	      elseif (id_face2.eq.4) then
-             cbc(ifc,iel,1) = 't  '
+             cbc(ifc,iel,2) = 't  '
           elseif (id_face2.eq.5) then
-             cbc(ifc,iel,1) = 'O  '
+             cbc(ifc,iel,2) = 'O  '
           elseif (id_face2.eq.7) then
-             cbc(ifc,iel,1) = 'I  '
+             cbc(ifc,iel,2) = 'I  '
           elseif (id_face2.eq.9) then
-             cbc(ifc,iel,1) = 'I  '
+             cbc(ifc,iel,2) = 'I  '
           endif
         enddo
         enddo
