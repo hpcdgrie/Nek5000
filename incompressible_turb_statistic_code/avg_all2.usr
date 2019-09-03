@@ -116,6 +116,8 @@ c
 c-----------------------------------------------------------------------
       if ( (mod(istep,iastep).eq.0.and.istep.gt.1)) then
 
+         call calc_tke_eps()
+	  
 c         time_temp = time
 c         time      = atime   ! Output the duration of this avg
          dtmp      = param(63)
