@@ -1,0 +1,35 @@
+cc-----------------------------------------------------------------------
+      subroutine print_max_min_cfl()
+cc determine a representative size of a grid point in a element.
+cc using the shortest nearest point distance to present the mesh size.
+cc calculate taylor scale and kolmogrove scale at the same time.
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      !===== find max cflf location ?
+      call compute_cfl(cfl,vx,vy,vz,dt)	  
+	
+      ntot = nx1*ny1*nz1*nelv
+      clf_max = glmax(cflf,ntot)
+      clf_max_x = 0.0
+      clf_max_y = 0.0
+      clf_max_z = 0.0
+
+      do i =1,ntot
+         if(cflf(i,1,1,1).ge.clf_max) then
+            clf_max_x = xm1(i,1,1,1)
+            clf_max_y = ym1(i,1,1,1)
+            clf_max_z = zm1(i,1,1,1)
+         endif		 
+      enddo
+
+      vec = sqrt(clf_max_x**2 + clf_max_y**2+ clf_max_z**2)
+	  
+      if(vec.gt.0.0) then
+       write(6,*) "max clf xyz: ", clf_max_x,clf_max_y,clf_max_z
+      endif	
+	 
+      return
+      end
+c------------------------------------------------------------------------

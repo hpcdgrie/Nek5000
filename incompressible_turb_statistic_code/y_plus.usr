@@ -7,14 +7,15 @@ C=======================================================================
 	  integer n
       n=nx1*ny1*nz1*nelv
 	  
+      if (nid.eq.0) write(6,*) "CK2"
 	  call cheap_dist(walldist,1,'W  ')	 
-      call y_p_limits(walldist,ypmin,ypmax)
+      call y_p_limits(walldist)
 
       return
       end
 
 C-------------------------------------------------------------------
-      subroutine y_p_limits(wd,ypmin,ypmax)
+      subroutine y_p_limits(wd)
       include 'SIZE'
       include 'TOTAL'
       include 'AVG'
@@ -26,6 +27,8 @@ C-------------------------------------------------------------------
       real tau(3),norm(3),rho,mu,vsca,tauw,yp,utau
       real n_points_wall,n_less_than_one,n_less_than_five
       real totalAA,singleAA
+   
+       if (nid.eq.0) write(6,*) "CK3"
    
       totalAA = 0.0
       singleAA = 0.0
@@ -152,8 +155,8 @@ C-------------------------------------------------------------------
               tauw=sqrt(tauw)
               utau=sqrt(tauw/rho)
               yp=wd(ipoint)*utau*rho/mu
-              if(yp.gt.0) ypmin=min(ypmin,yp)
-              ypmax=max(ypmax,yp)
+C              if(yp.gt.0) ypmin=min(ypmin,yp)
+C              ypmax=max(ypmax,yp)
 
               n_points_wall = n_points_wall + 1.0
               if(yp.le.1.0) n_less_than_one = n_less_than_one + 1.0
@@ -169,8 +172,8 @@ C-------------------------------------------------------------------
         enddo
       enddo
 
-      ypmin=glmin(ypmin,1)
-      ypmax=glmax(ypmax,1)
+C      ypmin=glmin(ypmin,1)
+C      ypmax=glmax(ypmax,1)
 
       n_points_wall = glsum(n_points_wall,1)
       n_less_than_one = glsum(n_less_than_one,1)
@@ -180,7 +183,7 @@ C-------------------------------------------------------------------
       if (nid.eq.0) write(6,*)  "C===============================C"
       if (nid.eq.0) write(6,*)  "y_plus information for all walls"
 
-	  if (nid.eq.0) write(6,*)  "y_plus min/max: ",ypmin,ypmax
+C	  if (nid.eq.0) write(6,*)  "y_plus min/max: ",ypmin,ypmax
 
       if (nid.eq.0) write(6,*) "n_points_wall is :",n_points_wall
       if (nid.eq.0) write(6,*) "n_less_than_one is :",n_less_than_one

@@ -93,7 +93,7 @@ c Calculate distance between GLL points
       if (nid.eq.0) write(6,*)  "C=========================C"
   	  
       call outpost2(meshsize,tay_scale,tay_ratio,
-     &kol_scale,kol_ratio,ldimt,'rm2')
+     &kol_scale,kol_ratio,ldimt,'msh')
 
       return
       end

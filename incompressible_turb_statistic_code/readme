@@ -5,12 +5,7 @@ have this at the first line of your usr code
 
 in userchk:
 
-define y_plus_info_dump_freq and 
-mesh_size_dump_freq
-
-and call:
-
-     call incompressible_turb_stat(y_plus_info_dump_freq,mesh_size_dump_freq)
+     call incompressible_turb_stat
 
 
 

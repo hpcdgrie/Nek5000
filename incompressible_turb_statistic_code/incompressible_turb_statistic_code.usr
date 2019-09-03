@@ -1,10 +1,11 @@
 #include "avg_all2.usr"
 #include "y_plus.usr"
 #include "mesh_size.usr"
+#include "print_max_min_cfl.usr"
 c------------------------------------------------------------------------
-      subroutine incompressible_turb_stat(y_plus_info_dump_freq,
-     $ mesh_size_dump_freq)
-
+      subroutine incompressible_turb_stat
+      include 'SIZE'
+      include 'TOTAL'
 c incompressible flow turbulent statisitc
 c 1. average
 c 2. calculate y+
@@ -14,16 +15,20 @@ c 4. mesh size and compare with taylor/kol scale
       integer y_plus_info_dump_freq
       integer mesh_size_dump_freq
 	  
-c      y_plus_info_dump_freq = 100   ! turbulent information dump (printing) frequency in logfile
-c      mesh_size_dump_freq = 500   ! mesh size f file dump frequency
 	  
       call avg_all2()
+      call print_max_min_cfl()
       
-      if((istep.gt.0).and.(mod(istep,y_plus_info_dump_freq).eq.0))then
+      y_plus_info_dump_freq = 10   ! turbulent information dump (printing) frequency in logfile
+c 	   y_plus_info_dump_freq = ! you can reset here if you want .
+
+      if ( (mod(istep,y_plus_info_dump_freq).eq.0.and.istep.gt.1)) then
         call calc_y_plus()
       endif
 
-      if((istep.gt.0).and.(mod(istep,mesh_size_dump_freq).eq.0))then
+       mesh_size_dump_freq =param(15)
+c 	   mesh_size_dump_freq = ! you can reset here if you want .
+      if ( (mod(istep,mesh_size_dump_freq).eq.0.and.istep.gt.1)) then
         call calc_tke_eps()
         call mesh_size()
       endif
