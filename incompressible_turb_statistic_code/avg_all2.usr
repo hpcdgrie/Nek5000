@@ -1,0 +1,197 @@
+      subroutine avg_all2
+c same of avg_all, but dump avg data for the whole simulation, not iostep segment
+c
+c also calualte velocity gradient tensor for epsilon calculation.
+      include 'SIZE'
+      include 'TOTAL'
+      include 'AVG'
+#     include "INCOMPRESSIBLE_TURB_STAT"
+
+      logical ifverbose
+      integer icalld
+      save    icalld
+      data    icalld  /0/
+
+      if (ax1.ne.lx1 .or. ay1.ne.ly1 .or. az1.ne.lz1) then
+         if(nid.eq.0) write(6,*)
+     $     'ABORT: wrong size of ax1,ay1,az1 in avg_all(), check SIZE!'
+         call exitt
+      endif
+      if (ax2.ne.lx2 .or. ay2.ne.ay2 .or. az2.ne.lz2) then
+         if(nid.eq.0) write(6,*)
+     $     'ABORT: wrong size of ax2,ay2,az2 in avg_all(), check SIZE!'
+         call exitt
+      endif
+
+      ntot  = lx1*ly1*lz1*nelv
+      ntott = lx1*ly1*lz1*nelt
+      nto2  = lx2*ly2*lz2*nelv
+ 
+	  ntot9 = ntot*9
+	  
+      ! initialization
+      if (icalld.eq.0) then
+         icalld = icalld + 1
+         atime  = 0.
+         timel  = time
+
+         call rzero(uavg,ntot)
+         call rzero(vavg,ntot)
+         call rzero(wavg,ntot)
+         call rzero(pavg,nto2)
+         do i = 1,ldimt
+            call rzero(tavg(1,1,1,1,i),ntott)
+         enddo
+
+         call rzero(urms,ntot)
+         call rzero(vrms,ntot)
+         call rzero(wrms,ntot)
+         call rzero(prms,nto2)
+         do i = 1,ldimt
+            call rzero(trms(1,1,1,1,i),ntott)
+         enddo
+
+         call rzero(vwms,ntot)
+         call rzero(wums,ntot)
+         call rzero(uvms,ntot)
+
+
+         call rzero(gradu_avg,ntot9)
+         call rzero(gradu2_avg,ntot9)
+
+      endif
+
+      call calc_v_grad_tensor()
+
+
+      dtime = time  - timel
+      atime = atime + dtime
+
+      ! dump freq
+      iastep=param(15)
+c      iastep = param(68)
+c      if  (iastep.eq.0) iastep=param(15)   ! same as iostep
+c      if  (iastep.eq.0) iastep=500
+
+      ifverbose=.false.
+      if (istep.le.10) ifverbose=.true.
+      if  (mod(istep,iastep).eq.0) ifverbose=.true.
+
+      if (atime.ne.0..and.dtime.ne.0.) then
+         if(nio.eq.0) write(6,*) 'Compute statistics ...'
+         beta  = dtime/atime
+         alpha = 1.-beta
+         ! compute averages E(X)
+         call avg1    (uavg,vx,alpha,beta,ntot ,'um  ',ifverbose)
+         call avg1    (vavg,vy,alpha,beta,ntot ,'vm  ',ifverbose)
+         call avg1    (wavg,vz,alpha,beta,ntot ,'wm  ',ifverbose)
+         call avg1    (pavg,pr,alpha,beta,nto2 ,'prm ',ifverbose)
+         call avg1    (tavg,t ,alpha,beta,ntott,'tm  ',ifverbose)
+         do i = 2,ldimt
+            call avg1 (tavg(1,1,1,1,i),t(1,1,1,1,i),alpha,beta,
+     &                 ntott,'psav',ifverbose)
+         enddo
+
+         ! compute averages E(X^2)
+         call avg2    (urms,vx,alpha,beta,ntot ,'ums ',ifverbose)
+         call avg2    (vrms,vy,alpha,beta,ntot ,'vms ',ifverbose)
+         call avg2    (wrms,vz,alpha,beta,ntot ,'wms ',ifverbose)
+         call avg2    (prms,pr,alpha,beta,nto2 ,'prms',ifverbose)
+         call avg2    (trms,t ,alpha,beta,ntott,'tms ',ifverbose)
+         do i = 2,ldimt
+            call avg2 (trms(1,1,1,1,i),t(1,1,1,1,i),alpha,beta,
+     &                 ntott,'psms',ifverbose)
+         enddo
+
+         ! compute averages E(X*Y) (for now just for the velocities)
+         call avg3    (uvms,vx,vy,alpha,beta,ntot,'uvm ',ifverbose)
+         call avg3    (vwms,vy,vz,alpha,beta,ntot,'vwm ',ifverbose)
+         call avg3    (wums,vz,vx,alpha,beta,ntot,'wum ',ifverbose)
+
+         ! compute velocity gradient avg and avg2
+        call avg1(gradu_avg,gradu,alpha,beta,ntot9,'gu1',ifverbose)
+        call avg2(gradu2_avg,gradu,alpha,beta,ntot9,'gu2',ifverbose)
+      endif
+c
+c-----------------------------------------------------------------------
+      if ( (mod(istep,iastep).eq.0.and.istep.gt.1)) then
+
+c         time_temp = time
+c         time      = atime   ! Output the duration of this avg
+         dtmp      = param(63)
+         param(63) = 1       ! Enforce 64-bit output
+
+         call outpost2(uavg,vavg,wavg,pavg,tavg,ldimt,'avg')
+         call outpost2(urms,vrms,wrms,prms,trms,ldimt,'rms')
+         call outpost2(uvms,vwms,wums,tke,eps,ldimt,'rm2')
+
+         param(63) = dtmp
+c         atime = 0.
+c         time  = time_temp  ! Restore clock
+
+      endif
+c
+      timel = time
+c
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine calc_v_grad_tensor()
+c calculate velocity gradient tensor
+c
+      include 'SIZE'
+      include 'TOTAL'
+#     include "INCOMPRESSIBLE_TURB_STAT"
+
+      call gradm1(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),vx)
+      call gradm1(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),vy)
+      call gradm1(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),vz)
+
+      call opcolv(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),bm1)
+      call opcolv(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),bm1)
+      call opcolv(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),bm1)
+
+      call opdssum(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3))
+      call opdssum(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3))
+      call opdssum(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3))
+
+      call opcolv(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),binvm1)
+      call opcolv(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),binvm1)
+      call opcolv(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),binvm1)
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine calc_tke_eps()
+c calculate epsilon
+      include 'SIZE'
+      include 'TOTAL'
+      include 'AVG'
+#     include "INCOMPRESSIBLE_TURB_STAT"
+
+      real*8 nu 
+
+      ntot  = lx1*ly1*lz1*nelv
+      nu = param(2)/param(1)
+
+      do i =1,ntot
+
+       tke(i) = urms(i,1,1,1) - uavg(i,1,1,1)**2.0
+     &  + vrms(i,1,1,1) - vavg(i,1,1,1)**2.0
+     &  + wrms(i,1,1,1) - wavg(i,1,1,1)**2.0
+
+        eps(i) = 0.0
+
+	    do j = 1,3
+        do k = 1,3
+          eps(i)  =  eps(i)  + (gradu2_avg(i,j,k) - gradu_avg(i,j,k)**2)
+        enddo
+        enddo
+ 
+        eps(i)  = eps(i) *nu
+		
+      enddo
+
+      return   
+      end
+c-----------------------------------------------------------------------

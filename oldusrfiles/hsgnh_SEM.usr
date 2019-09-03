@@ -1,0 +1,1424 @@
+c-----------------------------------------------------------------------
+C
+C  USER SPECIFIED ROUTINES:
+C
+C     - boundary conditions
+C     - initial conditions
+C     - variable properties
+C     - local acceleration for fluid (a)
+C     - forcing function for passive scalar (q)
+C     - general purpose routine for checking errors etc.
+C
+c-----------------------------------------------------------------------
+      subroutine uservp (ix,iy,iz,eg)
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e,f,eg
+      e = gllel(eg)
+    
+      utrans = param(1)
+      
+      if(z.gt.0.5) then
+      udiff = param(2)
+      endif
+	  
+      if(z.le.0.5) then
+      udiff = param(2) + 199*param(2)*(0.5-z)/0.5
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userf  (ix,iy,iz,eg)
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e,f,eg
+c     e = gllel(eg)
+
+
+c     Note: this is an acceleration term, NOT a force!
+c     Thus, ffx will subsequently be multiplied by rho(x,t).
+      ffx=0.0
+      ffy=0.0
+      ffz=0.0     
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userq  (ix,iy,iz,eg)
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e,f,eg
+c     e = gllel(eg)
+
+      qvol   = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userchk
+      include 'SIZE'
+      include 'TOTAL'
+
+      parameter (ninp=5)   ! number of pressure interpolation points
+      common /TURBULENCESPECTRA/
+     & uvw_ts(3,ninp),xyz_ts(3,ninp)
+
+      logical ifverbose
+      common /data_sg/ ubar_sg  
+      logical exist
+      character*20 vfilename
+
+      frfile_number = 0
+	  
+      nlx1m=((lx1-1)/2)+1 
+
+      nxyz=lx1*ly1*lz1 
+      ntot=lx1*ly1*lz1*nelt
+
+      call synthetic_eddies
+      call adjust_inlet(0.0,0.0,ubar_sg)
+c----------------------------------------------------------------------
+c in this part, we are trying to plot the one-dimensional spectra
+c Please see Pope's book p224.
+c a total number of 1000 points are sampled
+c but longitudinal autocorrelation are only calculated for the first 500 hundred points.
+c----------------------------------------------------------------------
+      n_interp=0
+      if (nid.eq.0) then
+	  n_interp=ninp
+	  
+      pi = 3.1415926
+      R = 30*0.0254  ! 
+      alpha = pi/8   ! 22.5 degree
+      totalz = 10*0.0254 
+      startz = 60*0.0254
+      endz = startz - totalz
+      dz = totalz/dble(ninp-1)
+
+       xyz_ts(1,1) = R*cos(alpha)
+       xyz_ts(2,1) = -R*sin(alpha)
+       xyz_ts(3,1) = startz
+	  
+      do iz = 2,ninp
+       xyz_ts(1,iz) = R*cos(alpha)
+       xyz_ts(2,iz) = -R*sin(alpha)
+       xyz_ts(3,iz) = xyz_ts(3,iz-1) - dz
+      enddo
+
+      write(6,*) "*** Interp. Matrix generated"
+
+      endif
+
+      call interp_v(uvw_ts,xyz_ts,n_interp)
+
+
+      if (nid.eq.0) then
+      do iz = 1,ninp
+
+      write(vfilename,11)iz
+      inquire(file=vfilename,exist=exist)
+      if(exist) then 
+        open(198,file=vfilename,form='formatted',status='old',
+     &position='append',action='write')
+      else
+        open(198,file=vfilename,form='formatted',status='new',
+     &action='write')
+      endif
+      write(198,10)  uvw_ts(1,iz),uvw_ts(2,iz),uvw_ts(3,iz)
+
+   11 format('velocity.',I1,'.dat') 	  
+   10 format(F12.5,',',F12.5,',',F12.5)
+      close(198)
+      enddo
+
+      endif
+
+c      
+c
+c      if (nid.eq.0) then
+c      open(199,file='pxyz.dat',form='formatted',status='replace')
+c      do j=1,ninp
+c      write(199,10) j,xyz(1,j),xyz(2,j),xyz(3,j)
+c      enddo
+c   10 format(I4,',',F12.5,',',F12.5,',',F12.5)
+c      close(199)
+c      endif
+c	  
+c      if (nid.eq.0) then
+c      inquire(file='phist.dat',exist=exist)
+c      if(exist) then 
+c        open(198,file='phist.dat',form='formatted',status='old',
+c     &position='append',action='write')
+c      else
+c        open(198,file='phist.dat',form='formatted',status='new',
+c     &action='write')
+c      endif
+c      write(198,11) istep,ppp(1,1),ppp(1,2),ppp(1,3),ppp(1,4),
+c     &ppp(1,5),ppp(1,6),ppp(1,7)
+c   11 format(I4,',',F12.5,',',F12.5,',',F12.5,',',F12.5,
+c     &',',F12.5,',',F12.5,',',F12.5)
+c      close(198)
+c      endif
+c	  
+c---------------------------------------------------------------------------------
+
+      pmax=glmax(pr,ntot)  
+      pmin=glmin(pr,ntot)
+      if (nid.eq.0) write(6,*) "Pressure: ",pmin," - ",pmax 
+
+      vmax=glmax(vz,ntot)
+      vmin=glmin(vz,ntot)
+      if (nid.eq.0) write(6,*) "Velocity z: ",vmin," - ",vmax
+
+      call avg_all()
+      iostep = param(15)
+      if (mod(istep,iostep).eq.0.and.istep.gt.0) then
+      call print_limits
+      endif
+
+      call mesh_size_and_taylor_scale()
+
+      return
+      end
+c--------------------------------------------------------------------------------
+      subroutine useric (ix,iy,iz,ieg)
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      common /data_sg/ ubar_sg
+
+      integer idum,e,eg
+      save    idum
+      data    idum / 0 /
+
+      if (idum.eq.0) idum = 99 + nid
+      ux = 0.05*(ran1(idum)-0.5)*ubar_sg  !uin(ix,iy,iz,e)
+      uy = 0.05*(ran1(idum)-0.5)*ubar_sg  !vin(ix,iy,iz,e)
+      uz = (-1.0+0.05*(ran1(idum)-0.5))*ubar_sg  !win(ix,iy,iz,e)	! *wscale to save time?
+      temp=0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userbc (ix,iy,iz,iside,ieg)
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      common /data_sg/ ubar_sg
+      common /SEM/ uin(lx1,ly1,lz1,lelv)
+     $              , vin(lx1,ly1,lz1,lelv)
+     $              , win(lx1,ly1,lz1,lelv)
+
+      integer idum1,eg
+      save    idum1
+      data    idum1 / 0 /
+
+      integer e,ieg
+
+      e = gllel(ieg)
+
+      ux=uin(ix,iy,iz,e)
+      uy=vin(ix,iy,iz,e)
+      uz=-1*win(ix,iy,iz,e)
+	  
+c      ux = 0.0
+c      uy = 0.0
+c      uz = -1.0*ubar_sg
+
+      temp=0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat
+      include 'SIZE'
+      include 'TOTAL'
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat3
+      include 'SIZE'
+      include 'TOTAL'
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat2         ! need to scale geometry here. 
+      parameter (np_nstp=1)
+      include 'SIZE'
+      include 'TOTAL'
+
+      integer i,j,k,e,eg,f,ipipe_mask  
+
+      common /data_sg/ ubar_sg
+ 
+
+c setting bulk velocity
+      ubar_sg = 0.49085 ! quarter of a feet per second??, m/s??
+c velocity at inlet, corresponding to velocity arrays at 1.28 m/s
+c Velocity at inlet * 162.2 = veloicity in arrays *62.2
+
+c convert geometry from inch to meter.
+      ntot = nx1*ny1*nz1*nelt
+c=========
+c flat inlet and outlet.
+c unit in inch.
+c
+c  
+c
+      do i=1,ntot
+      flag_upper = 0
+      flag_lower = 0
+
+      R = sqrt(xm1(i,1,1,1)**2 + ym1(i,1,1,1)**2)
+      pi = 3.1415926
+      alpha = 45.0 - acos(xm1(i,1,1,1)/R)*180.0/pi
+
+      z_max = 75.0
+      z_min = 0.0
+      z_1 = 68.0
+      z_2 = 25.0
+	  
+      z_upper = 68.0 + alpha*0.04166666666
+      z_lower = 25.0 + alpha*0.04166666666
+      if(zm1(i,1,1,1).gt.z_upper) flag_upper = 1
+      if(zm1(i,1,1,1).lt.z_lower) flag_lower = 1
+
+      if (flag_upper.eq.1) then
+      ratio = (zm1(i,1,1,1)-z_upper)/(z_max-z_1)
+      zm1(i,1,1,1) = z_upper + ratio*(z_max-z_upper)
+      endif
+    
+      if (flag_lower.eq.1) then
+      ratio = (zm1(i,1,1,1)-z_lower)/(z_min-z_2)
+      zm1(i,1,1,1) = z_min + (1-ratio)*(z_lower-z_min)
+      endif
+      
+      enddo  
+c=========	  
+
+ 
+      do i=1,ntot
+         xm1(i,1,1,1) = xm1(i,1,1,1)*0.0254
+         ym1(i,1,1,1) = ym1(i,1,1,1)*0.0254
+         zm1(i,1,1,1) = zm1(i,1,1,1)*0.0254	
+      enddo
+      param(59) = 1     ! force nek5 to recognize element deformation.
+   
+      if (nid.eq.0) then 
+      write(6,*) 'geometry scale completed'	  
+      endif	  
+
+      return
+      end
+c-----------------------------------------------------------------------
+c-----------------------------------------------------------------------
+      subroutine interp_v(uvw,xyz,n)
+c
+c     evaluate velocity for list of points xyz
+c
+c     Note:  -- modify
+c     intpts to get rid off " WARNING: point on boundary or ..."
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      real uvw(3,n),xyz(3,n)
+      logical ifjac,ifpts
+
+      parameter(nmax=lpart,nfldmax=ldim)
+      common /rv_intp/ pts(ldim*nmax)
+      common /iv_intp/ ihandle
+      common /outtmp/ wrk(lx1*ly1*lz1*lelt,nfldmax)
+
+      integer icalld,e
+      save    icalld
+      data    icalld /0/
+
+      nxyz  = nx1*ny1*nz1
+      ntot  = nxyz*nelt
+      nflds = 3 !u,v,w
+
+      if (n.gt.nmax) call exitti ('ABORT: interp_v() n > nmax!$',n)
+
+      if (nelgt.ne.nelgv) call exitti
+     $   ('ABORT: interp_v() nelgt.ne.nelgv not yet supported!$',nelgv)
+
+      do i=1,n
+         pts(i)     = xyz(1,i)
+         pts(i + n) = xyz(2,i)
+         if (if3d)  pts(i + n*2) = xyz(3,i)
+      enddo
+
+      if (icalld.eq.0) then             ! interpolation setup
+        icalld = 1
+        tolin  = 1.e-8
+        call intpts_setup(tolin,ihandle)
+      endif
+
+
+      ! pack working array
+      call opcopy(wrk(1,1),wrk(1,2),wrk(1,3),vx,vy,vz)
+
+      ! interpolate
+      ifjac  = .true.           ! output transpose (of Jacobian)
+      ifpts  = .true.            ! find points
+      call intpts(wrk,nflds,pts,n,uvw,ifjac,ifpts,ihandle)      ! copy array instead?
+
+      return
+      end
+c-----------------------------------------------------------------------
+C=======================================================================
+      subroutine print_limits
+      include 'SIZE'
+      include 'TOTAL'
+
+
+      integer lxyze
+      parameter(lxyze=lx1*ly1*lz1*lelv)
+
+C     Primitive Variables
+      real umin,umax,vmin,vmax,wmin,wmax,pmin,pmax
+      real hmin,hmax,kmin,kmax,mmin,mmax
+      real rmsu,rmsv,rmsw,rmsp,rmsh,rmsk,rmsm
+      real du,dv,dw,dp,dh,dk,dm
+
+C     other variables
+      real vfmin,vfmax,tempmin,tempmax,mumin,mumax
+      real ypmin,ypmax
+	  
+      common /wDist/ walldist(lx1,ly1,lz1,lelv)
+	  common /property/ dens0,visc0
+c	  data dens0,visc0/992.34d0,6.56d-2/
+
+	 integer n
+
+      n=nx1*ny1*nz1*nelv
+	  
+	  call cheap_dist(walldist,1,'W  ')	 
+      call y_p_limits(walldist,ypmin,ypmax)
+
+      if(nid.eq.0) then
+        write(*,*)
+        write(*,255) 'y_p plus',ypmin,ypmax
+        write(*,*)
+      endif
+
+ 253  format(2x,a16,4es15.5)
+ 254  format(2x,a16,4a15)
+ 255  format(2x,a16,2es15.5)
+
+      return
+      end
+
+C-------------------------------------------------------------------
+      subroutine y_p_limits(wd,ypmin,ypmax)
+      include 'SIZE'
+      include 'TOTAL'
+
+      integer lxyz,lxyze
+      parameter(lxyz=lx1*ly1*lz1,lxyze=lxyz*lelv)
+      integer e,i,i0,i1,j,j0,j1,k,k0,k1,iw,jw,kw,i2
+      integer ipoint,wpoint
+      real gradu(lxyze,3,3),dens(1),visc(1),wd(1)
+      real tau(3),norm(3),rho,mu,vsca,tauw,yp,utau
+      real n_points_wall,n_less_than_one,n_less_than_five
+      real totalAA,singleAA
+   
+      totalAA = 0.0
+      singleAA = 0.0
+
+      n_points_wall = 0.0
+      n_less_than_one = 0.0
+      n_less_than_five = 0.0
+
+      ypmin=1.0d30
+      ypmax=-1.0d30
+
+      call gradm1(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),vx)
+      call gradm1(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),vy)
+      call gradm1(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),vz)
+
+      call opcolv(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),bm1)
+      call opcolv(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),bm1)
+      call opcolv(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),bm1)
+
+      call opdssum(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3))
+      call opdssum(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3))
+      call opdssum(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3))
+
+      call opcolv(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),binvm1)
+      call opcolv(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),binvm1)
+      call opcolv(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),binvm1)
+
+      do e=1,nelv
+        do iside=1,2*ldim
+          if(cbc(iside,e,1).eq.'W  ')then
+		  
+          ipipe_mask=1
+          nlx1m=((lx1-1)/2)+1
+
+          if (iside.eq.1) then
+          wx1=xm1(nlx1m,1,nlx1m,e)
+          wy1=ym1(nlx1m,1,nlx1m,e)
+          endif  
+
+          if (iside.eq.2) then
+          wx1=xm1(lx1,nlx1m,nlx1m,e)
+          wy1=ym1(lx1,nlx1m,nlx1m,e)
+          endif
+
+          if (iside.eq.3) then
+          wx1=xm1(nlx1m,lx1,nlx1m,e)
+          wy1=ym1(nlx1m,lx1,nlx1m,e)
+          endif
+
+          if (iside.eq.4) then
+          wx1=xm1(1,nlx1m,nlx1m,e)
+          wy1=ym1(1,nlx1m,nlx1m,e)
+          endif
+
+          if (iside.eq.5) then
+          wx1=xm1(nlx1m,nlx1m,1,e)
+          wy1=ym1(nlx1m,nlx1m,1,e)
+          endif
+
+          if (iside.eq.6) then
+          wx1=xm1(nlx1m,nlx1m,lx1,e)
+          wy1=ym1(nlx1m,nlx1m,lx1,e)
+          endif
+
+          rr1=sqrt(wx1**2+wy1**2)/0.0254
+   
+c if on side wall 1
+          if (wy1.gt.(-1e-4)) then
+          ipipe_mask=0
+          endif
+
+c if on side wall 2
+          if ((wx1+wy1).lt.1e-4) then
+          ipipe_mask=0
+          endif
+
+c if at inner wall
+          if (rr1.lt.26.1) then
+          ipipe_mask=0
+          endif
+
+c if at outer wall
+          if (rr1.gt.32.9) then
+          ipipe_mask=0
+          endif 
+		  
+          if(ipipe_mask.eq.1) then
+            i0=1
+            j0=1
+            k0=1
+            i1=lx1
+            j1=ly1
+            k1=lz1
+            if(iside.eq.1) then
+              j0=2
+              j1=2
+            elseif(iside.eq.2) then
+              i0=lx1-1
+              i1=lx1-1
+            elseif(iside.eq.3) then
+              j0=ly1-1
+              j1=ly1-1
+            elseif(iside.eq.4) then
+              i0=2
+              i1=2
+            elseif(iside.eq.5) then
+              k0=2
+              k1=2
+            elseif(iside.eq.6) then
+              k0=lz1-1
+              k1=lz1-1
+            endif
+            do i=i0,i1
+            do j=j0,j1
+            do k=k0,k1
+              iw=i
+              jw=j
+              kw=k
+              if    (iside.eq.1) then
+                jw=1
+                norm(1)=unx(iw,kw,iside,e)
+                norm(2)=uny(iw,kw,iside,e)
+                norm(3)=unz(iw,kw,iside,e)
+                singleAA = area(iw,kw,iside,e)
+              elseif(iside.eq.2) then
+                iw=lx1
+                norm(1)=unx(jw,kw,iside,e)
+                norm(2)=uny(jw,kw,iside,e)
+                norm(3)=unz(jw,kw,iside,e)
+                singleAA = area(jw,kw,iside,e)
+              elseif(iside.eq.3) then
+                jw=ly1
+                norm(1)=unx(iw,kw,iside,e)
+                norm(2)=uny(iw,kw,iside,e)
+                norm(3)=unz(iw,kw,iside,e)
+                singleAA = area(iw,kw,iside,e)
+              elseif(iside.eq.4) then
+                iw=1
+                norm(1)=unx(jw,kw,iside,e)
+                norm(2)=uny(jw,kw,iside,e)
+                norm(3)=unz(jw,kw,iside,e)
+                singleAA = area(jw,kw,iside,e)
+              elseif(iside.eq.5) then
+                kw=1
+                norm(1)=unx(iw,jw,iside,e)
+                norm(2)=uny(iw,jw,iside,e)
+                norm(3)=unz(iw,jw,iside,e)
+                singleAA = area(iw,jw,iside,e)
+              else
+                kw=lx1
+                norm(1)=unx(iw,jw,iside,e)
+                norm(2)=uny(iw,jw,iside,e)
+                norm(3)=unz(iw,jw,iside,e)
+                singleAA = area(iw,jw,iside,e)
+              endif
+              ipoint=i+(j-1)*lx1+(k-1)*lx1*ly1+(e-1)*lxyz
+              wpoint=iw+(jw-1)*lx1+(kw-1)*lx1*ly1+(e-1)*lxyz
+c              if(iflomach) then
+c                mu=visc(wpoint)
+c                rho=dens(wpoint)
+c              else
+               mu=param(2)
+               rho=param(1)
+c              endif
+
+              do i2=1,ldim
+              tau(i2)=0.0
+                do j2=1,ldim
+                  tau(i2)=tau(i2)+
+     &             mu*(gradu(wpoint,i2,j2)+gradu(wpoint,j2,i2))*norm(j2)
+                enddo
+              enddo
+
+              vsca=0.0
+              do i2=1,ldim
+                vsca=vsca+tau(i2)*norm(i2)
+              enddo
+
+              tauw=0.0
+              do i2=1,ldim
+                tauw=tauw+(tau(i2)-vsca*norm(i2))**2
+              enddo
+              tauw=sqrt(tauw)
+              utau=sqrt(tauw/rho)
+              yp=wd(ipoint)*utau*rho/mu
+              if(yp.gt.0) ypmin=min(ypmin,yp)
+              ypmax=max(ypmax,yp)
+
+              n_points_wall = n_points_wall + 1.0
+              if(yp.le.1.0) n_less_than_one = n_less_than_one + 1.0
+              if(yp.le.5.0) n_less_than_five= n_less_than_five+ 1.0
+  
+              totalAA = totalAA + singleAA
+            enddo
+            enddo
+            enddo
+          endif
+ 
+          endif
+        enddo
+      enddo
+
+      ypmin=glmin(ypmin,1)
+      ypmax=glmax(ypmax,1)
+
+      n_points_wall = glsum(n_points_wall,1)
+      n_less_than_one = glsum(n_less_than_one,1)
+      n_less_than_five = glsum(n_less_than_five,1)
+      totalAA = glsum(totalAA,1) 
+
+      if (nid.eq.0) write(6,*) "n_points_wall is :",n_points_wall
+      if (nid.eq.0) write(6,*) "n_less_than_one is :",n_less_than_one
+      if (nid.eq.0) write(6,*) "n_less_than_five is :",n_less_than_five
+
+      ratio = n_less_than_one/n_points_wall
+      if (nid.eq.0) write(6,*) "ratio less than 1.0 is :",ratio         
+      ratio = n_less_than_five/n_points_wall
+      if (nid.eq.0) write(6,*) "ratio less than 5.0 is :",ratio 
+  
+      if (nid.eq.0) write(6,*) "total wetted area is: ", totalAA
+      
+      return
+      end
+c=======================================================================
+      subroutine synthetic_eddies
+      include 'SIZE'
+      include 'TOTAL'
+      parameter(neddy=1000)
+
+      integer icalld
+      save    icalld
+      data    icalld /0/
+
+      real llss,Vb,wk_e,Re,aeddy
+      real ex,ey,ez,eps,rrx,rry,rrz,qs,A
+      real uin,vin,win
+
+      integer neddy_gl,neddy_ll,eddy_pt
+
+      common /eddy/ ex(neddy),ey(neddy),ez(neddy),eps(3,neddy)
+      common /eddy01/neddy_gl,neddy_ll,eddy_pt(neddy)
+      common /SEM/ uin(lmaxv),vin(lmaxv),win(lmaxv)
+      common /scruz/ wk_e(neddy*3)
+
+      integer e,ne
+
+
+      nv = nx1*ny1*nz1*nelv
+      nt = nx1*ny1*nz1*nelt
+
+      pi = 4.*atan(1.0)
+
+c --- generate initial synth. eddy distribution ----
+
+      llss = 0.001*0.2
+c      Re = 10000.0
+c      u0 = Re*0.1563/13.6
+      u0 = 0.49085
+c      Re = u0*13.6/0.1563
+      Re = 87122
+      rtime0=dnekclock()
+      if (istep.eq.0) then
+        iseed=(nid+1)*11 +1
+        call  ZBQLINI(iseed)
+        call distribute_eddy(neddy,neddy_ll,eddy_pt)
+        neddy_gl = neddy
+c     Generate local eddies with locations ex,ey,ez
+        do i=1,neddy_ll
+           i_l = eddy_pt(i)
+           call gen_eddy(ex,ey,ez,eps,i_l,llss)
+        enddo
+
+c     zeroing eddies off this proc
+       call zero_nonlocal_eddies(ex,ey,ez,eps,neddy_ll,neddy,eddy_pt)
+      else 
+       call advect_recycle_eddies(ex,ey,ez,eps,neddy_ll,eddy_pt,llss,u0)
+       call zero_nonlocal_eddies(ex,ey,ez,eps,neddy_ll,neddy,eddy_pt)
+      endif
+      rtime1=dnekclock()-rtime0
+      if(nid.eq.0)write(6,2)rtime1
+ 2    format("set_eddies time = ",e15.4)
+
+c     Gather eddies on each processor
+c     possibly replace with glvadd
+      rtime0=dnekclock()
+      call gop(ex,wk_e,'+  ',neddy_gl)
+      call gop(ey,wk_e,'+  ',neddy_gl)
+      call gop(ez,wk_e,'+  ',neddy_gl)
+      call gop(eps,wk_e,'+  ',neddy_gl*3)
+      rtime1=dnekclock()-rtime0
+      if(nid.eq.0)write(6,3)rtime1
+ 3    format("gop time  = ",e15.4)
+
+      rtime0=dnekclock()
+      ex_max = vlmax(ex,neddy)
+      ex_min = vlmin(ex,neddy)
+      ey_max = vlmax(ey,neddy)
+      ey_min = vlmin(ey,neddy)
+      ez_max = vlmax(ez,neddy)
+      ez_min = vlmin(ez,neddy)
+      rtime1=dnekclock()-rtime0
+      if(nid.eq.0)write(6,4)rtime1
+ 4    format("vlmin/max time  = ",e15.4)
+
+c     Global min/max range of eddies
+      if (nid.eq.0) then
+        write(6,*) "Test ex:",ex_min,ex_max
+        write(6,*) "Test ey:",ey_min,ey_max
+        write(6,*) "Test ez:",ez_min,ez_max
+      endif
+          
+c ---- compute velocity contribution of eddies ------
+
+      rms = 0.2*u0
+      xmin = 0.466973434448242186 - llss
+      xmax = 0.838227784156799327 + llss
+      ymin = -0.592696816635131851 - llss
+      ymax = 0.175516236655681725E-09 + llss
+      zmin = 1.90500014299082743 - llss
+      zmax = 1.90500014299082743 + llss
+      Vb = (xmax-xmin)*(ymax-ymin)*(zmax-zmin)
+
+      rtime0=dnekclock()
+      do i=1,nv
+        uin(i) = 0.0
+        vin(i) = 0.0
+        win(i) = u0
+        y = ym1(i,1,1,1)
+        x = xm1(i,1,1,1)
+		z = zm1(i,1,1,1)
+        aeddy = neddy
+        if (z.gt.zmin) then
+        do ne=1,neddy
+        rrx = (x-ex(ne))/llss
+	    rry = (y-ey(ne))/llss
+	    rrz = (zmin+llss-ez(ne))/llss
+	    rr = sqrt(rrx**2 + rry**2 + rrz**2)
+	    qs = sqrt(16*Vb/(15*pi*(llss**3)))*((sin(pi*rr))**2)*rr
+	    A = qs/(rr**3)
+
+            if (rr.lt.1) then
+		fx = A*(rry*eps(3,ne) - rrz*eps(2,ne))
+		fy = A*(rrz*eps(1,ne) - rrx*eps(3,ne))
+		fz = A*(rrx*eps(2,ne) - rry*eps(1,ne))
+            else
+		fx = 0.0
+		fy = 0.0
+		fz = 0.0
+            endif
+            uin(i) = uin(i) + rms*fx/sqrt(aeddy)
+            vin(i) = vin(i) + rms*fy/sqrt(aeddy)
+            win(i) = win(i) + rms*fz/sqrt(aeddy)
+        enddo        
+		endif   
+      enddo
+
+c      if(mod(istep,2).eq.0)then
+c        rtime0=dnekclock()
+        uin_max=glmax(uin,nv)
+        uin_min=glmin(uin,nv)
+        vin_max=glmax(vin,nv)
+        vin_min=glmin(vin,nv)
+        win_max=glmax(win,nv)
+        win_min=glmin(win,nv)
+c        rtime1=dnekclock()-rtime0
+
+      if (nid.eq.0) then
+        write(6,*) "> uxin: ", uin_min, " - ",uin_max
+        write(6,*) "> uyin: ", vin_min, " - ",vin_max
+        write(6,*) "> uzin: ", win_min, " - ",win_max
+      endif 
+c	endif
+           
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine distribute_eddy(neddy,nl,pt)
+c     distribute eddies across all processors
+c     neddy - total # eddies
+c     nl    - local # eddies
+c     pt    - local pointer
+      include 'SIZE'
+      include 'PARALLEL'
+
+      integer neddy,nl,pt(1)
+      integer nbatch0,nbatch1,ibnd,istart,iend
+
+      nbatch0 = neddy/np + 1
+      nbatch1 = neddy/np
+      ibnd = neddy - nbatch1*np - 1
+      if(nid.le.ibnd)then
+        nl     = nbatch0
+        istart = nbatch0*nid + 1
+c$$$        iend   = nbatch0*(nid+1)
+      else
+        nl     = nbatch1
+        istart = nbatch0*(ibnd+1) + nbatch1*(nid-(ibnd+1))+ 1
+c$$$        iend   = nbatch0*(ibnd+1) + nbatch1*(nid-ibnd)
+      endif
+
+      do i=1,nl
+         pt(i) = istart + (i-1)
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine gen_eddy(ex,ey,ez,eps,n,llss)
+c     Generate eddy location across three separate channels in fw_benchmark
+      include 'SIZE'
+      include 'TOTAL'
+
+      real ex(1),ey(1),ez(1),eps(3,1)
+      real llss, Vb
+      real xmin,xmax,ymin,ymax,zmin,zmax
+      integer i,i_l,n
+      
+      i_l = n
+      pi = 4.*atan(1.0)
+ 
+        xmin = 0.466973434448242186 - llss
+        xmax = 0.838227784156799327 + llss
+        ymin = -0.592696816635131851 - llss
+        ymax = 0.186299904119858337E-22 + llss
+        zmin = 1.90500000000000069 - llss
+        zmax = 1.90500000000000069 + llss
+
+        ex(i_l) = rnd_loc(xmin,xmax)
+        ey(i_l) = rnd_loc(ymin,ymax)
+	if(istep.eq.0)then
+           ez(i_l) = rnd_loc(zmin,zmax)
+	else
+	    ez(i_l) = zmin
+	endif       
+	
+        do j=1,3
+          rnd = ZBQLU01()
+          if (rnd.gt.0.5) eps(j,i_l)=  1.0
+          if (rnd.le.0.5) eps(j,i_l)= -1.0
+        enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
+      real function rnd_loc (min,max)
+      real rnd,min,max
+      rnd = zbqlu01()
+      rnd_loc = rnd*(max-min) + min
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine zero_nonlocal_eddies(ex,ey,ez,eps,neddy_ll,neddy,pt)
+      include 'SIZE'
+
+      integer neddy_ll,neddy,pt(1)
+      real ex(1),ey(1),ez(1),eps(3,1)
+
+      i1 = pt(1)-1
+      i2 = pt(neddy_ll)+1
+
+      do i=1,i1
+         ex(i) = 0.0
+         ey(i) = 0.0
+         ez(i) = 0.0
+         do k=1,3
+            eps(k,i)=0.0
+         enddo
+      enddo
+      
+      do i=i2,neddy
+         ex(i) = 0.0
+         ey(i) = 0.0
+         ez(i) = 0.0
+         do k=1,3
+            eps(k,i)=0.0
+         enddo
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine advect_recycle_eddies(ex,ey,ez,eps,n,pt,llss,u0)
+c     Convect eddies and recycle by regenerating the
+c     location across three separate channels in fw_benchmark
+      include 'SIZE'
+      include 'TSTEP'
+
+      real ex(1),ey(1),ez(1),eps(3,1)
+      real rnd,x0,llss,u0,Re
+      real xmin,xmax,ymin,ymax,zmin,zmax
+      integer i,i_l,n
+      integer pt(1)
+
+c      Re = 10000.0
+c      u0 = Re*0.1563/13.6
+      u0 = 0.49085
+c      Re = u0*13.6/0.1563
+      Re = 87122
+      zmax = 1.90500000000000069 + llss
+      do i=1,n
+        i_l = pt(i)
+        ez(i_l) = ez(i_l) + u0*DT
+                            
+c     ---- recycle exiting eddies ----
+        if (ez(i_l).gt.(zmax))then
+        call gen_eddy(ex,ey,ez,eps,i_l,llss)
+        endif
+      enddo
+
+      return
+      end
+c-------------------------------------------------------------------
+*******************************************************************
+********    FILE: randgen.f             ***********
+********    AUTHORS: Richard Chandler       ***********
+********         (richard@stats.ucl.ac.uk)  ***********
+********         Paul Northrop          ***********
+********         (northrop@stats.ox.ac.uk)  ***********
+********    LAST MODIFIED: 26/8/03          ***********
+********    See file randgen.txt for details    ***********
+*******************************************************************
+
+      BLOCK DATA ZBQLBD01
+*
+*       Initializes seed array etc. for random number generator.
+*       The values below have themselves been generated using the
+*       NAG generator.
+*
+      COMMON /ZBQL0001/ ZBQLIX,B,C
+      DOUBLE PRECISION ZBQLIX(43),B,C
+      INTEGER I
+      DATA (ZBQLIX(I),I=1,43) /8.001441D7,5.5321801D8,
+     +1.69570999D8,2.88589940D8,2.91581871D8,1.03842493D8,
+     +7.9952507D7,3.81202335D8,3.11575334D8,4.02878631D8,
+     +2.49757109D8,1.15192595D8,2.10629619D8,3.99952890D8,
+     +4.12280521D8,1.33873288D8,7.1345525D7,2.23467704D8,
+     +2.82934796D8,9.9756750D7,1.68564303D8,2.86817366D8,
+     +1.14310713D8,3.47045253D8,9.3762426D7 ,1.09670477D8,
+     +3.20029657D8,3.26369301D8,9.441177D6,3.53244738D8,
+     +2.44771580D8,1.59804337D8,2.07319904D8,3.37342907D8,
+     +3.75423178D8,7.0893571D7 ,4.26059785D8,3.95854390D8,
+     +2.0081010D7,5.9250059D7,1.62176640D8,3.20429173D8,
+     +2.63576576D8/
+      DATA B / 4.294967291D9 /
+      DATA C / 0.0D0 /
+      END
+******************************************************************
+******************************************************************
+******************************************************************
+      SUBROUTINE ZBQLINI(SEED)
+******************************************************************
+*       To initialize the random number generator - either
+*       repeatably or nonrepeatably. Need double precision
+*       variables because integer storage can't handle the
+*       numbers involved
+******************************************************************
+*   ARGUMENTS
+*   =========
+*   SEED    (integer, input). User-input number which generates
+*       elements of the array ZBQLIX, which is subsequently used 
+*       in the random number generation algorithm. If SEED=0,
+*       the array is seeded using the system clock if the 
+*       FORTRAN implementation allows it.
+******************************************************************
+*   PARAMETERS
+*   ==========
+*   LFLNO   (integer). Number of lowest file handle to try when
+*       opening a temporary file to copy the system clock into.
+*       Default is 80 to keep out of the way of any existing
+*       open files (although the program keeps searching till
+*       it finds an available handle). If this causes problems,
+*               (which will only happen if handles 80 through 99 are 
+*               already in use), decrease the default value.
+******************************************************************
+      INTEGER LFLNO
+      PARAMETER (LFLNO=80)
+******************************************************************
+*   VARIABLES
+*   =========
+*   SEED    See above
+*   ZBQLIX  Seed array for the random number generator. Defined
+*       in ZBQLBD01
+*   B,C Used in congruential initialisation of ZBQLIX
+*   SS,MM,} System clock secs, mins, hours and days
+*   HH,DD }
+*   FILNO   File handle used for temporary file
+*   INIT    Indicates whether generator has already been initialised
+*
+      INTEGER SEED,SS,MM,HH,DD,FILNO,I
+      INTEGER INIT
+      DOUBLE PRECISION ZBQLIX(43),B,C
+      DOUBLE PRECISION TMPVAR1,DSS,DMM,DHH,DDD
+
+      COMMON /ZBQL0001/ ZBQLIX,B,C
+      SAVE INIT
+
+*
+*   Ensure we don't call this more than once in a program
+*
+      IF (INIT.GE.1) THEN
+       IF(INIT.EQ.1) THEN
+        WRITE(*,1)
+        INIT = 2
+       ENDIF
+       RETURN
+      ELSE
+       INIT = 1
+      ENDIF
+*
+*       If SEED = 0, cat the contents of the clock into a file
+*       and transform to obtain ZQBLIX(1), then use a congr.
+*       algorithm to set remaining elements. Otherwise take
+*       specified value of SEED.
+*
+*>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+*>>>>>>>    NB FOR SYSTEMS WHICH DO NOT SUPPORT THE  >>>>>>>
+*>>>>>>>    (NON-STANDARD) 'CALL SYSTEM' COMMAND,    >>>>>>>
+*>>>>>>>    THIS WILL NOT WORK, AND THE FIRST CLAUSE >>>>>>>
+*>>>>>>>    OF THE FOLLOWING IF BLOCK SHOULD BE  >>>>>>>
+*>>>>>>>    COMMENTED OUT.               >>>>>>>
+*>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+      IF (SEED.EQ.0) THEN
+*>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+*>>>>>>>    COMMENT OUT FROM HERE IF YOU DON'T HAVE  >>>>>>>
+*>>>>>>>    'CALL SYSTEM' CAPABILITY ...         >>>>>>>
+*>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+       temp=1.0
+*<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+*<<<<<<<<   ... TO HERE (END OF COMMENTING OUT FOR    <<<<<<<
+*<<<<<<<<   USERS WITHOUT 'CALL SYSTEM' CAPABILITY    <<<<<<<
+*<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+      ELSE
+       TMPVAR1 = DMOD(DBLE(SEED),B)
+      ENDIF
+      ZBQLIX(1) = TMPVAR1
+      DO 100 I = 2,43
+       TMPVAR1 = ZBQLIX(I-1)*3.0269D4
+       TMPVAR1 = DMOD(TMPVAR1,B)       
+       ZBQLIX(I) = TMPVAR1
+ 100  CONTINUE
+
+ 1    FORMAT(//5X,'****WARNING**** You have called routine ZBQLINI ',
+     +'more than',/5X,'once. I''m ignoring any subsequent calls.',//)
+ 2    FORMAT(//5X,'**** ERROR **** In routine ZBQLINI, I couldn''t',
+     +' find an',/5X,
+     +'available file number. To rectify the problem, decrease the ',
+     +'value of',/5X,
+     +'the parameter LFLNO at the start of this routine (in file ',
+     +'randgen.f)',/5X,
+     +'and recompile. Any number less than 100 should work.')
+      END
+******************************************************************
+      FUNCTION ZBQLU01(DUMMY)
+*
+*       Returns a uniform random number between 0 & 1, using
+*       a Marsaglia-Zaman type subtract-with-borrow generator.
+*       Uses double precision, rather than integer, arithmetic 
+*       throughout because MZ's integer constants overflow
+*       32-bit integer storage (which goes from -2^31 to 2^31).
+*       Ideally, we would explicitly truncate all integer 
+*       quantities at each stage to ensure that the double
+*       precision representations do not accumulate approximation
+*       error; however, on some machines the use of DNINT to
+*       accomplish this is *seriously* slow (run-time increased
+*       by a factor of about 3). This double precision version 
+*       has been tested against an integer implementation that
+*       uses long integers (non-standard and, again, slow) -
+*       the output was identical up to the 16th decimal place
+*       after 10^10 calls, so we're probably OK ...
+*
+      DOUBLE PRECISION ZBQLU01,DUMMY,B,C,ZBQLIX(43),X,B2,BINV
+      INTEGER CURPOS,ID22,ID43
+
+      COMMON /ZBQL0001/ ZBQLIX,B,C
+      SAVE /ZBQL0001/
+      SAVE CURPOS,ID22,ID43
+      DATA CURPOS,ID22,ID43 /1,22,43/
+
+      B2 = B
+      BINV = 1.0D0/B
+ 5    X = ZBQLIX(ID22) - ZBQLIX(ID43) - C
+      IF (X.LT.0.0D0) THEN
+       X = X + B
+       C = 1.0D0
+      ELSE
+       C = 0.0D0
+      ENDIF
+      ZBQLIX(ID43) = X
+*
+*     Update array pointers. Do explicit check for bounds of each to
+*     avoid expense of modular arithmetic. If one of them is 0 the others
+*     won't be
+*
+      CURPOS = CURPOS - 1
+      ID22 = ID22 - 1
+      ID43 = ID43 - 1
+      IF (CURPOS.EQ.0) THEN
+       CURPOS=43
+      ELSEIF (ID22.EQ.0) THEN
+       ID22 = 43
+      ELSEIF (ID43.EQ.0) THEN
+       ID43 = 43
+      ENDIF
+*
+*     The integer arithmetic there can yield X=0, which can cause 
+*     problems in subsequent routines (e.g. ZBQLEXP). The problem
+*     is simply that X is discrete whereas U is supposed to 
+*     be continuous - hence if X is 0, go back and generate another
+*     X and return X/B^2 (etc.), which will be uniform on (0,1/B). 
+*
+      IF (X.LT.BINV) THEN
+       B2 = B2*B
+       GOTO 5
+      ENDIF
+
+      ZBQLU01 = X/B2
+
+      END
+c-----------------------------------------------------------------------
+      subroutine adjust_inlet(ubar_x,ubar_y,ubar_z)
+      include 'SIZE'
+      include 'TOTAL'
+c      include 'SYNTHEDDY'
+      common /SEM/ uin(lx1,ly1,lz1,lelv)
+     $              , vin(lx1,ly1,lz1,lelv)
+     $              , win(lx1,ly1,lz1,lelv)
+
+      real*8 wk1, pp0,pp1,pp2
+      integer e,f      
+
+      ntot=lx1*ly1*lz1*nelt
+      pp1 = 0.0
+      pp0 = 0.0
+      do e=1,nelt
+        do f=1,6
+          if (cbc(f,e,1).eq.'v  ') then
+            call surface_int(sint,sarea,win,e,f)
+            pp1 = pp1 + sint
+            pp0 = pp0 + sarea
+          endif
+        enddo
+      enddo
+      call gop(pp0,wk1,'+  ',1)
+      call gop(pp1,wk1,'+  ',1)
+      pp2 = pp1/pp0
+      if (nid.eq.0) write(6,*) ">> Avg. win: ",pp2
+      do i=1,ntot
+        win(i,1,1,1) = win(i,1,1,1) - pp2 + ubar_z
+      enddo
+      pp1 = 0.0
+      pp0 = 0.0
+      do e=1,nelt
+        do f=1,6
+          if (cbc(f,e,1).eq.'v  ') then
+            call surface_int(sint,sarea,uin,e,f)
+            pp1 = pp1 + sint
+            pp0 = pp0 + sarea
+          endif
+        enddo
+      enddo
+      call gop(pp0,wk1,'+  ',1)
+      call gop(pp1,wk1,'+  ',1)
+      pp2 = pp1/pp0
+      if (nid.eq.0) write(6,*) ">> Avg. uin: ",pp2
+      do i=1,ntot
+        uin(i,1,1,1) = uin(i,1,1,1) - pp2 +ubar_x
+      enddo
+      pp1 = 0.0
+      pp0 = 0.0
+      do e=1,nelt
+        do f=1,6
+          if (cbc(f,e,1).eq.'v  ') then
+            call surface_int(sint,sarea,vin,e,f)
+            pp1 = pp1 + sint
+            pp0 = pp0 + sarea
+          endif
+        enddo
+      enddo
+      call gop(pp0,wk1,'+  ',1)
+      call gop(pp1,wk1,'+  ',1)
+      pp2 = pp1/pp0
+      if (nid.eq.0) write(6,*) ">> Avg. vin: ",pp2
+      do i=1,ntot
+        vin(i,1,1,1) = vin(i,1,1,1) - pp2 + ubar_y
+      enddo
+      return
+      end
+c-----------------------------------------------------------------------
+cc-----------------------------------------------------------------------
+      subroutine mesh_size_and_taylor_scale()
+cc determine a representative size of a grid point in a element.
+cc using the shortest nearst point distance to present the mesh size.
+ 
+      include 'SIZE'
+      include 'TOTAL'
+      integer i,j,k,ie,ntot
+      integer im,ip,jm,jp,km,kp
+      real*8 di,dj,dk,alpha,beta
+
+      real*8 meshsizemin,meshsizemax
+      real*8 meshsize(lx1,ly1,lz1,lelt)
+	  
+      integer lxyz,lxyze
+      parameter(lxyz=lx1*ly1*lz1,lxyze=lxyz*lelv)
+      real gradu(lxyze,3,3),alpha,beta,smax,smin
+      logical ifverbose
+      
+      common /TAYLOR_SCALE/ gradu_avg(lxyze,3,3)
+     & , gradu2_avg(lxyze,3,3)
+     & , u_avg(lxyze)
+     & , u2_avg(lxyze)
+     & , v_avg(lxyze)
+     & , v2_avg(lxyze)
+     & , w_avg(lxyze)
+     & , w2_avg(lxyze)
+     & , tay_scale(lxyze)
+     & , tay_ratio(lxyze)
+     & , kol_scale(lxyze)
+     & , kol_ratio(lxyze)
+
+      if (nid.eq.0) write(6,*) "call mesh_size" 
+
+      ntot = nx1*ny1*nz1*nelv
+	  
+      call rzero(meshsize,ntot)	  
+	
+c Calculate distance between GLL points
+
+      do ie=1,nelv
+         do k=1,nz1
+           km = max(1,k-1)
+           kp = min(nz1,k+1)
+           do j=1,ny1
+             jm = max(1,j-1)
+             jp = min(ny1,j+1)
+             do i=1,nx1
+               im = max(1,i-1)
+               ip = min(nx1,i+1)
+
+               di = sqrt((xm1(ip,j,k,ie)-xm1(im,j,k,ie))**2
+     $            + (ym1(ip,j,k,ie)-ym1(im,j,k,ie))**2
+     $            + (zm1(ip,j,k,ie)-zm1(im,j,k,ie))**2)
+
+               dj = sqrt((xm1(i,jp,k,ie)-xm1(i,jm,k,ie))**2
+     $            + (ym1(i,jp,k,ie)-ym1(i,jm,k,ie))**2
+     $            + (zm1(i,jp,k,ie)-zm1(i,jm,k,ie))**2)
+
+               dk = sqrt((xm1(i,j,kp,ie)-xm1(i,j,km,ie))**2
+     $            + (ym1(i,j,kp,ie)-ym1(i,j,km,ie))**2
+     $            + (zm1(i,j,kp,ie)-zm1(i,j,km,ie))**2)
+
+               di = di/dble(ip-im)
+               dj = dj/dble(jp-jm)
+               dk = dk/dble(kp-km)
+               meshsize(i,j,k,ie) = (di*dj*dk)**(1.0/3.0)
+
+             enddo
+           enddo
+         enddo
+      enddo
+
+      meshsizemax=glmax(meshsize,ntot)
+      meshsizemin=glmin(meshsize,ntot)
+      if (nid.eq.0) write(6,*) "meshsize: ",meshsizemin," - ",meshsizemax
+ 
+      call gradm1(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),vx)
+      call gradm1(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),vy)
+      call gradm1(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),vz)
+
+      call opcolv(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),bm1)
+      call opcolv(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),bm1)
+      call opcolv(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),bm1)
+
+      call opdssum(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3))
+      call opdssum(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3))
+      call opdssum(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3))
+
+      call opcolv(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),binvm1)
+      call opcolv(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),binvm1)
+      call opcolv(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),binvm1)
+
+      if(istep.gt.0) then
+ 
+      beta = 1.0/dble(istep)
+      alpha = 1.0- beta
+      ifverbose = .false.
+	  
+      call avg1(gradu_avg,gradu,alpha,beta,ntot9,'gu1',ifverbose)
+      call avg2(gradu2_avg,gradu,alpha,beta,ntot9,'gu2',ifverbose)
+
+      call avg1(u_avg,vx,alpha,beta,ntot,'uavg',ifverbose)
+      call avg1(v_avg,vy,alpha,beta,ntot,'vavg',ifverbose)
+      call avg1(w_avg,vz,alpha,beta,ntot,'wavg',ifverbose)
+	  
+      call avg2(u2_avg,vx,alpha,beta,ntot,'u2avg',ifverbose)
+      call avg2(v2_avg,vy,alpha,beta,ntot,'v2avg',ifverbose)
+      call avg2(w2_avg,vz,alpha,beta,ntot,'w2avg',ifverbose)
+
+      smax=glmax(gradu_avg,ntot9)
+      smin=glmin(gradu_avg,ntot9)
+      if (nid.eq.0) write(6,*) "gradu_avg: ",smin," - ",smax
+
+      smax=glmax(gradu2_avg,ntot9)
+      smin=glmin(gradu2_avg,ntot9)
+      if (nid.eq.0) write(6,*) "gradu2_avg: ",smin," - ",smax
+
+      smax=glmax(u_avg,ntot)
+      smin=glmin(u_avg,ntot)
+      if (nid.eq.0) write(6,*) "u_avg: ",smin," - ",smax
+
+      smax=glmax(v_avg,ntot)
+      smin=glmin(v_avg,ntot)
+      if (nid.eq.0) write(6,*) "v_avg: ",smin," - ",smax
+
+      smax=glmax(w_avg,ntot)
+      smin=glmin(w_avg,ntot)
+      if (nid.eq.0) write(6,*) "w_avg: ",smin," - ",smax
+
+      smax=glmax(u2_avg,ntot)
+      smin=glmin(u2_avg,ntot)
+      if (nid.eq.0) write(6,*) "u2_avg: ",smin," - ",smax
+
+      smax=glmax(v2_avg,ntot)
+      smin=glmin(v2_avg,ntot)
+      if (nid.eq.0) write(6,*) "v2_avg: ",smin," - ",smax
+
+      smax=glmax(w2_avg,ntot)
+      smin=glmin(w2_avg,ntot)
+      if (nid.eq.0) write(6,*) "w2_avg: ",smin," - ",smax
+	  
+      endif
+
+      iostep = param(15)
+      if ( (mod(istep,iostep).eq.0.and.istep.gt.1)) then
+ 
+      do i = 1,ntot
+      diss =  0.0
+      tke = 0.0
+        do j = 1,3
+        do k = 1,3
+           diss = diss + (gradu2_avg(i,j,k) - gradu_avg(i,j,k)**2)
+        enddo
+        enddo
+
+      tke = u2_avg(i) - u_avg(i)**2
+      tke = tke +  v2_avg(i) - v_avg(i)**2
+      tke = tke +  w2_avg(i) - w_avg(i)**2
+
+      nu = param(2)/param(1)
+      diss = diss*nu
+
+      tay_scale(i) = (15*nu*tke/diss)**0.5
+      tay_ratio(i) = meshsize(i,1,1,1)/tay_scale(i) !! should be less than 1
+
+      kol_scale(i) = (nu**3/diss)**0.25
+      kol_ratio(i) =  meshsize(i,1,1,1)/kol_scale(i) !! should be less than 1
+
+      enddo
+
+      smax=glmax(tay_scale,ntot)  
+      smin=glmin(tay_scale,ntot)
+      if (nid.eq.0) write(6,*) "tay_scale: ",smin," - ",smax
+	
+      smax=glmax(tay_ratio,ntot)  
+      smin=glmin(tay_ratio,ntot)
+      if (nid.eq.0) write(6,*) "tay_ratio: ",smin," - ",smax
+	  
+      smax=glmax(kol_scale,ntot)  
+      smin=glmin(kol_scale,ntot)
+      if (nid.eq.0) write(6,*) "kol_scale: ",smin," - ",smax
+	
+      smax=glmax(kol_ratio,ntot)  
+      smin=glmin(kol_ratio,ntot)
+      if (nid.eq.0) write(6,*) "kol_ratio: ",smin," - ",smax
+
+      call outpost(meshsize,tay_scale,tay_ratio,
+     &kol_scale,kol_ratio,'tay')
+      endif
+	  
+      return
+      end
+c------------------------------------------------------------------------
+cc-----------------------------------------------------------------------
+c automatically added by makenek
+      subroutine usrsetvert(glo_num,nel,nx,ny,nz) ! to modify glo_num
+      integer*8 glo_num(1)
+      return
+      end
+
+

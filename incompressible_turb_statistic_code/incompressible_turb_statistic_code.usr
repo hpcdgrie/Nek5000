@@ -1,0 +1,37 @@
+#include "avg_all2.usr"
+#include "y_plus.usr"
+#include "mesh_size.usr"
+c------------------------------------------------------------------------
+      subroutine incompressible_turb_stat(turb_info_dump_freq,
+     $ mesh_size_dump_freq)
+
+c incompressible flow turbulent statisitc
+c 1. average
+c 2. calculate y+
+c 3. calculate tke and eps
+c 4. mesh size and compare with taylor/kol scale
+
+      integer turb_info_dump_freq
+      integer mesh_size_dump_freq
+	  
+c      turb_info_dump_freq = 100   ! turbulent information dump (printing) frequency in logfile
+c      mesh_size_dump_freq = 500   ! mesh size f file dump frequency
+	  
+      call avg_all2()
+      
+      if((istep.gt.0).and.(mod(istep,turb_info_dump_freq).eq.0))then
+        call calc_y_plus()
+        call calc_tke_eps()
+      endif
+
+      if((istep.gt.0).and.(mod(istep,mesh_size_dump_freq).eq.0))then
+        call calc_tke_eps()
+        call mesh_size()
+      endif
+	  
+
+      return
+      end
+c------------------------------------------------------------------------
+
+

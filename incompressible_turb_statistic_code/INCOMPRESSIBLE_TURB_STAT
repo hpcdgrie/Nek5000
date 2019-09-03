@@ -1,0 +1,18 @@
+      parameter(lxyz=lx1*ly1*lz1,lxyze=lxyz*lelv)
+
+      real gradu(lxyze,3,3),
+     $     gradu_avg(lxyze,3,3),
+     $     gradu2_avg(lxyze,3,3)
+      common /VGRAD/ gradu,gradu_avg,gradu2_avg
+
+      real*8 tke(lxyze),
+     $       eps(lxyze)
+      common /TKEEPS/ tke,eps
+	  
+	  real*8 meshsize(lx1,ly1,lz1,lelt),
+     $       tay_scale(lxyze),
+     $       tay_ratio(lxyze),
+     $       kol_scale(lxyze),
+     $       kol_ratio(lxyze)
+      common /MESHSIZE/ meshsize,tay_scale,tay_ratio
+     $ kol_scale,kol_ratio

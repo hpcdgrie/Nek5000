@@ -1,0 +1,100 @@
+cc-----------------------------------------------------------------------
+      subroutine mesh_size()
+cc determine a representative size of a grid point in a element.
+cc using the shortest nearest point distance to present the mesh size.
+cc calculate taylor scale and kolmogrove scale at the same time.
+
+      include 'SIZE'
+      include 'TOTAL'
+#     include "INCOMPRESSIBLE_TURB_STAT"
+
+      integer i,j,k,ie,ntot
+      integer im,ip,jm,jp,km,kp
+      real*8 di,dj,dk,alpha,beta
+      real*8 smax,smin
+
+      if (nid.eq.0) write(6,*) "call mesh_size" 
+
+      ntot = nx1*ny1*nz1*nelv
+	  
+      call rzero(meshsize,ntot)	  
+	
+c Calculate distance between GLL points
+
+      do ie=1,nelv
+         do k=1,nz1
+           km = max(1,k-1)
+           kp = min(nz1,k+1)
+           do j=1,ny1
+             jm = max(1,j-1)
+             jp = min(ny1,j+1)
+             do i=1,nx1
+               im = max(1,i-1)
+               ip = min(nx1,i+1)
+
+               di = sqrt((xm1(ip,j,k,ie)-xm1(im,j,k,ie))**2
+     $            + (ym1(ip,j,k,ie)-ym1(im,j,k,ie))**2
+     $            + (zm1(ip,j,k,ie)-zm1(im,j,k,ie))**2)
+
+               dj = sqrt((xm1(i,jp,k,ie)-xm1(i,jm,k,ie))**2
+     $            + (ym1(i,jp,k,ie)-ym1(i,jm,k,ie))**2
+     $            + (zm1(i,jp,k,ie)-zm1(i,jm,k,ie))**2)
+
+               dk = sqrt((xm1(i,j,kp,ie)-xm1(i,j,km,ie))**2
+     $            + (ym1(i,j,kp,ie)-ym1(i,j,km,ie))**2
+     $            + (zm1(i,j,kp,ie)-zm1(i,j,km,ie))**2)
+
+               di = di/dble(ip-im)
+               dj = dj/dble(jp-jm)
+               dk = dk/dble(kp-km)
+               meshsize(i,j,k,ie) = (di*dj*dk)**(1.0/3.0)
+
+             enddo
+           enddo
+         enddo
+      enddo
+
+      do i = 1,ntot
+        nu = param(2)/param(1)
+
+        tay_scale(i) = (15*nu*tke(i)/eps(i))**0.5
+        tay_ratio(i) = meshsize(i,1,1,1)/tay_scale(i) 
+
+        kol_scale(i) = (nu**3/eps(i))**0.25
+        kol_ratio(i) =  meshsize(i,1,1,1)/kol_scale(i) 
+
+      enddo
+
+
+      if (nid.eq.0) write(6,*)  "C==========================C"
+      if (nid.eq.0) write(6,*)  "mesh information"	  
+
+      smax=glmax(meshsize,ntot)
+      smin=glmin(meshsize,ntot)
+      if (nid.eq.0) write(6,*) "meshsize: ",smax," - ",smin
+	  
+      smax=glmax(tay_scale,ntot)  
+      smin=glmin(tay_scale,ntot)
+      if (nid.eq.0) write(6,*) "tay_scale: ",smin," - ",smax
+	
+      smax=glmax(tay_ratio,ntot)  
+      smin=glmin(tay_ratio,ntot)
+      if (nid.eq.0) write(6,*) "tay_ratio: ",smin," - ",smax
+	  
+      smax=glmax(kol_scale,ntot)  
+      smin=glmin(kol_scale,ntot)
+      if (nid.eq.0) write(6,*) "kol_scale: ",smin," - ",smax
+	
+      smax=glmax(kol_ratio,ntot)  
+      smin=glmin(kol_ratio,ntot)
+      if (nid.eq.0) write(6,*) "kol_ratio: ",smin," - ",smax
+
+      if (nid.eq.0) write(6,*)  "end of mesh information"	
+      if (nid.eq.0) write(6,*)  "C=========================C"
+  	  
+      call outpost2(meshsize,tay_scale,tay_ratio,
+     &kol_scale,kol_ratio,ldimt,'rm2')
+
+      return
+      end
+c------------------------------------------------------------------------
