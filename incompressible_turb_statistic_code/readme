@@ -1,11 +1,20 @@
-have this at the first line of your usr code
+collecting basically all turbulence statistics for incompressible flow
+
+usage:
+
+1. copy all files in to folder 
+
+incompressible_turb_statistic_code/
+
+2. 
+have this at the first line of your case.usr code
 
 #include "incompressible_turb_statistic_code/incompressible_turb_statistic_code.usr"
 
-
+3. 
 in userchk:
 
-     call incompressible_turb_stat
+call incompressible_turb_stat
 
 
 

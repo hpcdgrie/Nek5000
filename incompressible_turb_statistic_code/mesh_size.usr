@@ -98,3 +98,20 @@ c Calculate distance between GLL points
       return
       end
 c------------------------------------------------------------------------
+      subroutine load_tke_eps(fldname)
+      include 'SIZE'
+      include 'TOTAL'
+#     include "INCOMPRESSIBLE_TURB_STAT"
+
+      character*80 fldname
+      ntot=nx1*ny1*nz1*nelv
+
+       call load_fld(fldname)
+       do i=1,ntot
+        tke(i) =  pr(i,1,1,1)
+        eps(i) =  t(i,1,1,1,1)
+       enddo
+	  
+      return
+      end
+c------------------------------------------------------------------------

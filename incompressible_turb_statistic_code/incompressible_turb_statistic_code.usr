@@ -13,9 +13,10 @@ c 3. calculate tke and eps
 c 4. mesh size and compare with taylor/kol scale
 
       integer y_plus_info_dump_freq
-      integer mesh_size_dump_freq
-	  
-	  
+      logical ifmeshsizecompare
+      character*80 tkeepsfldname
+
+
       call avg_all2()
       call print_max_min_cfl()
       
@@ -26,13 +27,14 @@ c 	   y_plus_info_dump_freq = ! you can reset here if you want .
         call calc_y_plus()
       endif
 
-       mesh_size_dump_freq =param(15)
-c 	   mesh_size_dump_freq = ! you can reset here if you want .
-      if ( (mod(istep,mesh_size_dump_freq).eq.0.and.istep.gt.1)) then
-        call calc_tke_eps()
+c if post process for mesh size
+c 
+      ifmeshsizecompare = .FALSE.
+      if (ifmeshsizecompare) then
+        tkeepsfldname = 'rm2mus50.f00001'
+        call load_tke_eps(tkeepsfldname)
         call mesh_size()
       endif
-	  
 
       return
       end

@@ -186,7 +186,7 @@ c calculate epsilon
 
 	    do j = 1,3
         do k = 1,3
-          eps(i)  =  eps(i)  + (gradu2_avg(i,j,k) - gradu_avg(i,j,k)**2)
+        eps(i)=eps(i)+(gradu2_avg(i,j,k)-gradu_avg(i,j,k)**2)
         enddo
         enddo
  
@@ -194,6 +194,13 @@ c calculate epsilon
 		
       enddo
 
+	  smax=glmax(tke,ntot)
+      smin=glmin(tke,ntot)
+      if (nid.eq.0) write(6,*) "tke: ",smax," - ",smin
+	  smax=glmax(eps,ntot)
+      smin=glmin(eps,ntot)
+      if (nid.eq.0) write(6,*) "eps: ",smax," - ",smin
+	  
       return   
       end
 c-----------------------------------------------------------------------

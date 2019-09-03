@@ -7,7 +7,6 @@ C=======================================================================
 	  integer n
       n=nx1*ny1*nz1*nelv
 	  
-      if (nid.eq.0) write(6,*) "CK2"
 	  call cheap_dist(walldist,1,'W  ')	 
       call y_p_limits(walldist)
 
@@ -27,8 +26,6 @@ C-------------------------------------------------------------------
       real tau(3),norm(3),rho,mu,vsca,tauw,yp,utau
       real n_points_wall,n_less_than_one,n_less_than_five
       real totalAA,singleAA
-   
-       if (nid.eq.0) write(6,*) "CK3"
    
       totalAA = 0.0
       singleAA = 0.0
