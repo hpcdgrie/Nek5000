@@ -1,0 +1,293 @@
+c apply convective outlet boundary condition to outlet
+c input sideset ID of outlet surface
+c convective bc for all velocity components and all passive scalars
+c 
+c
+c notes about usage:
+c 1. set v and t to velocity and passive scalar
+c 2.
+c
+c
+c notes:
+c 1. outlet bulk velocity is integrated at each time-step
+c 2. normal grad at outlet is calculated and extrapolated to new time-step
+c 3. 2dn order time derivative for outlet velocity
+c
+c
+c
+c
+c
+c------------------------------------------------------------------------
+      subroutine calConvective(ssID)
+      include 'SIZE'
+      include 'TOTAL'
+
+      common /convective/ uconv(lx1,ly1,lz1,lelv,3)
+     $              , vconv(lx1,ly1,lz1,lelv,3)
+     $              , wconv(lx1,ly1,lz1,lelv,3)
+     $              , tconv(lx1,ly1,lz1,lelt,3,ldimt)
+     $              , ugrad(lx1,ly1,lz1,lelv,3,3)
+     $              , vgrad(lx1,ly1,lz1,lelv,3,3)
+     $              , wgrad(lx1,ly1,lz1,lelv,3,3)
+     $              , tgrad(lx1,ly1,lz1,lelt,3,3,ldimt)
+
+      integer id_face,ssID
+      real CU ! convective velocity
+
+      ln9 = nx1*ny1*nz1*nelv*3*3
+      ln3 = nx1*ny1*nz1*nelv*3
+      ln = nx1*ny1*nz1*nelv
+	  
+c initialization of convective common block
+      if(istep.eq.0) then
+c initialize convective velocity components
+       do it =1,3
+        call copy(uconv(1,1,1,1,it),vx,ln)
+        call copy(vconv(1,1,1,1,it),vy,ln)
+	    call copy(wconv(1,1,1,1,it),vz,ln)
+       enddo
+c initialize convective passive scalars
+       if(IFHEAT) then
+         do ips = 2,nfield
+          do it =1,3
+           call copy(tconv(1,1,1,1,it,ips-1),t(1,1,1,it,ips-1),ln)
+          enddo
+         enddo
+       endif
+
+c initialize convective velocity grad components
+       call rzero(ugrad,ln9)
+       call rzero(vgrad,ln9)
+	   call rzero(wgrad,ln9)
+
+c initialize convective passive scalars grad components	   
+       if(IFHEAT) then
+         do ips = 2,nfield 
+           call tgrad(tconv(1,1,1,1,1,1,ips-1),ln9)
+         enddo
+       endif
+      endif
+c end of initialization of convective common block
+
+c calculate outlet bulk velocity CU
+      call get_outlet_bulk_velocity(vx,vy,vz,ssID,CU)
+c 
+      call calAndExtrapolateGrad(ssID)
+c
+      call getNewConv(ssID,CU)
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine get_outlet_bulk_velocity(u,v,w,ssID,CU)
+      include 'SIZE'
+      include 'TOTAL'
+      integer id_face,ssID
+      real CU
+      real u(lx1,ly1,lz1,lelv)
+      real v(lx1,ly1,lz1,lelv)
+      real w(lx1,ly1,lz1,lelv)
+      real Unormal(lx1,ly1,lz1,lelv)
+      real AA,VAA
+      real totalArea,UA,sn1(3)
+
+      totalArea = 0.0
+      UA = 0.0
+	 
+      do iel=1,nelv
+      do ifc=1,2*ndim
+          id_face = bc(5,ifc,iel,1)
+          if (id_face.eq.ssID) then
+          call facind(i0,i1,j0,j1,k0,k1,nx1,ny1,nz1,ifc)
+          do k=k0,k1
+          do j=j0,j1
+          do i=i0,i1
+
+          call getSnormal(sn1,i,j,k,ifc,iel)		  
+
+          Unormal(i,j,k,iel) =  u(i,j,k,iel) * sn1(1) + 
+     & v(i,j,k,iel) * sn1(2) + w(i,j,k,iel) * sn1(3)
+
+          enddo
+          enddo
+          enddo	
+
+            call surface_int(VAA,AA,Unormal,iel,ifc)
+            totalArea = totalArea + AA
+            UA = UA + VAA
+          endif
+      enddo
+      enddo
+	  
+      totalArea = glsum(totalArea,1)
+      UA = glsum(UA,1)
+      CU = UA/totalArea
+      if (nid.eq.0) write(6,*) 'AVG velocity at outlet:' , CU
+
+      return
+      end	  
+c-----------------------------------------------------------------------
+  c-----------------------------------------------------------------------
+      subroutine calAndExtrapolateGrad(ssID)
+      include 'SIZE'
+      include 'TOTAL'
+      common /convective/ uconv(lx1,ly1,lz1,lelv,3)
+     $              , vconv(lx1,ly1,lz1,lelv,3)
+     $              , wconv(lx1,ly1,lz1,lelv,3)
+     $              , tconv(lx1,ly1,lz1,lelt,3,ldimt)
+     $              , ugrad(lx1,ly1,lz1,lelv,3,3)
+     $              , vgrad(lx1,ly1,lz1,lelv,3,3)
+     $              , wgrad(lx1,ly1,lz1,lelv,3,3)
+     $              , tgrad(lx1,ly1,lz1,lelt,3,3,ldimt)
+	  
+      real tmp1(lx1,ly1,lz1,lelv),tmp2(lx1,ly1,lz1,lelv)
+      integer id_face,ssID
+
+      ln9 = nx1*ny1*nz1*nelv*3*3
+      ln3 = nx1*ny1*nz1*nelv*3
+      ln = nx1*ny1*nz1*nelv
+	  
+      call gradm1 (ugrad(1,1,1,1,1,1),
+     &ugrad(1,1,1,1,2,1),ugrad(1,1,1,1,3,1),vx)
+      call gradm1 (vgrad(1,1,1,1,1,1),
+     &vgrad(1,1,1,1,2,1),vgrad(1,1,1,1,3,1),vy)
+      call gradm1 (wgrad(1,1,1,1,1,1),
+     &wgrad(1,1,1,1,2,1),wgrad(1,1,1,1,3,1),vz)
+
+       if(IFHEAT) then
+         do ips = 2,nfield 
+      call gradm1 (tgrad(1,1,1,1,1,1,ips-1),
+     &tgrad(1,1,1,1,2,1,ips-1),tgrad(1,1,1,1,2,1,ips-1),
+     &t(1,1,1,1,ips-1))
+         enddo
+       endif
+
+c store old value	
+        call copy(ugrad(1,1,1,1,1,3),ugrad(1,1,1,1,1,2),ln3)
+        call copy(ugrad(1,1,1,1,1,2),ugrad(1,1,1,1,1,1),ln3)
+        call copy(vgrad(1,1,1,1,1,3),vgrad(1,1,1,1,1,2),ln3)
+        call copy(vgrad(1,1,1,1,1,2),ugrad(1,1,1,1,1,1),ln3) 
+        call copy(wgrad(1,1,1,1,1,3),wgrad(1,1,1,1,1,2),ln3)
+        call copy(wgrad(1,1,1,1,1,2),wgrad(1,1,1,1,1,1),ln3)
+
+       if(IFHEAT) then
+         do ips = 2,nfield 
+       call copy(tgrad(1,1,1,1,1,3,ips-1),tgrad(1,1,1,1,1,2,ips-1),ln3)
+       call copy(tgrad(1,1,1,1,1,2,ips-1),tgrad(1,1,1,1,1,1,ips-1),ln3)
+         enddo
+       endif
+
+c extrapolate new grad
+       A = 2.0
+       B = -1.0
+
+       call add2sxy(ugrad(1,1,1,1,1,1),A,ugrad(1,1,1,1,1,3),B,ln3)
+       call add2sxy(vgrad(1,1,1,1,1,1),A,vgrad(1,1,1,1,1,3),B,ln3)
+       call add2sxy(wgrad(1,1,1,1,1,1),A,wgrad(1,1,1,1,1,3),B,ln3)
+
+       if(IFHEAT) then
+       do ips = 2,nfield 
+       call add2sxy(tgrad(1,1,1,1,1,1,ips-1),A,
+     & tgrad(1,1,1,1,1,3,ips-1),B,ln3)
+       enddo
+       endif
+
+      if (nid.eq.0) write(6,*) 'done extrapolate gradz' 
+	  
+      return
+      end	  
+c-----------------------------------------------------------------------
+      subroutine getNewConv(ssID,CU,dmdt,dhdt)
+      include 'SIZE'
+      include 'TOTAL'
+      common /convective/ uconv(lx1,ly1,lz1,lelv,3)
+     $              , vconv(lx1,ly1,lz1,lelv,3)
+     $              , wconv(lx1,ly1,lz1,lelv,3)
+     $              , tconv(lx1,ly1,lz1,lelt,3,ldimt)
+     $              , ugrad(lx1,ly1,lz1,lelv,3,3)
+     $              , vgrad(lx1,ly1,lz1,lelv,3,3)
+     $              , wgrad(lx1,ly1,lz1,lelv,3,3)
+     $              , tgrad(lx1,ly1,lz1,lelt,3,3,ldimt)
+
+      real CU,inv_dt
+      real*8 dmdt,dhdt
+      real m_in,m_out,h_in,h_out,hscale
+      integer id_face,ssID
+
+      ln9 = nx1*ny1*nz1*nelv*3*3
+      ln3 = nx1*ny1*nz1*nelv*3
+      ln = nx1*ny1*nz1*nelv
+	  
+c store old conv
+
+        call copy(uconv(1,1,1,1,3),uconv(1,1,1,1,2),ln)
+        call copy(uconv(1,1,1,1,2),uconv(1,1,1,1,1),ln)
+        call copy(vconv(1,1,1,1,3),vconv(1,1,1,1,2),ln)
+        call copy(vconv(1,1,1,1,2),vconv(1,1,1,1,1),ln)
+        call copy(wconv(1,1,1,1,3),wconv(1,1,1,1,2),ln)
+        call copy(wconv(1,1,1,1,2),wconv(1,1,1,1,1),ln)
+
+       if(IFHEAT) then
+         do ips = 2,nfield
+        call copy(tconv(1,1,1,1,3,ips-1),tconv(1,1,1,1,2,ips-1),ln)
+        call copy(tconv(1,1,1,1,2,ips-1),tconv(1,1,1,1,1,ips-1),ln)
+         enddo
+       endif
+
+      inv_dt = 1.0/dt
+
+      call backDif(ssID,uconv,ugrad(1,1,1,1,1,1),inv_dt,CU)
+      call backDif(ssID,vconv,vgrad(1,1,1,1,1,1),inv_dt,CU)
+      call backDif(ssID,wconv,wgrad(1,1,1,1,1,1),inv_dt,CU)
+
+       if(IFHEAT) then
+         do ips = 2,nfield
+         call backDif(ssID,tconv(1,1,1,1,1,ips-1),
+     & tgrad(1,1,1,1,1,1,ips-1),inv_dt,CU)
+         enddo
+       endif
+
+      if (nid.eq.0) write(6,*) 'done cal convective vel' 
+
+      return
+      end
+c---------------------------------------------------------------------------------
+      subroutine backDif(ssID,uconv1,ugrad1,inv_dt,CU)
+      include 'SIZE'
+      include 'TOTAL'
+      real uconv1(lx1,ly1,lz1,lelv,3)
+      real ugrad1(lx1,ly1,lz1,lelv,3)
+      read normGrad,snl(3)
+      real RIGHT,LEFT,CU,inv_dt
+      integer id_face,ssID
+
+	  do iel=1,nelv
+      do ifc=1,2*ndim
+          id_face = bc(5,ifc,iel,1)
+          if (id_face.eq.ssID) then
+		  call facind(i0,i1,j0,j1,k0,k1,nx1,ny1,nz1,ifc)
+          do k=k0,k1
+          do j=j0,j1
+          do i=i0,i1
+
+          call getSnormal(sn1,i,j,k,ifc,iel)
+          normGrad = ugrad1(i,j,k,iel,1)*snl(1) + 
+     & ugrad1(i,j,k,iel,2)*snl(2) +
+     & ugrad1(i,j,k,iel,3)*snl(3)
+
+          RIGHT = - CU * normGrad
+          RIGHT = RIGHT + inv_dt *2.0* uconv1(i,j,k,iel,2)
+          RIGHT = RIGHT - inv_dt *0.5* uconv1(i,j,k,iel,3)
+          LEFT = inv_dt * 1.5
+          uconv1(i,j,k,iel,1) = RIGHT/LEFT
+
+          enddo
+          enddo
+          enddo		  
+          endif
+      enddo
+      enddo
+
+      return
+      end
+c---------------------------------------------------------------------------------	  

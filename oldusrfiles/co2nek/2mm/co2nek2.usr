@@ -1,0 +1,223 @@
+c-----------------------------------------------------------------------
+      subroutine checkCO2Prop(dmdt,dhdt)
+      include 'SIZE'
+      include 'TOTAL'
+#     include "co2property/CO2PROP"
+
+      real*8    tMass(3)
+      save    tMass
+      data    tMass /0.0,0.0,0.0/
+      real*8    tEnerg(3)
+      save    tEnerg
+      data    tEnerg /0.0,0.0,0.0/
+
+      real*8 hr_flag(lx1,ly1,lz1,lelt)
+      real*8 varmin,varmax,dmdt,dmdt1,dhdt,dhdt1
+      ntot = nx1*ny1*nz1*nelv
+	  
+      varmax=glmax(rho_co2,ntot)  
+      varmin=glmin(rho_co2,ntot)
+      if (nid.eq.0) write(6,*) "Density: ",varmin," - ",varmax
+      varmax=glmax(visc_co2,ntot)  
+      varmin=glmin(visc_co2,ntot)
+      if (nid.eq.0) write(6,*) "Visc: ",varmin," - ",varmax
+      varmax=glmax(alpha_co2,ntot)  
+      varmin=glmin(alpha_co2,ntot)
+      if (nid.eq.0) write(6,*) "Alpha: ",varmin," - ",varmax
+      varmax=glmax(beta_co2,ntot)  
+      varmin=glmin(beta_co2,ntot)
+      if (nid.eq.0) write(6,*) "Beta: ",varmin," - ",varmax
+      varmax=glmax(T_co2,ntot)  
+      varmin=glmin(T_co2,ntot)
+      if (nid.eq.0) write(6,*) "T: ",varmin," - ",varmax
+	  
+      dmdt = 0.0
+      dhdt = 0.0	  
+
+      if(istep.eq.0) then
+	  tMass(3) = glsc2(vtrans(1,1,1,1,1),bm1,ntot)
+      call col3(hr_flag,t(1,1,1,1,1),vtrans(1,1,1,1,1),ntot)
+      tEnerg(3) = glsc2(hr_flag,bm1,ntot)
+      elseif(istep.eq.1) then
+	  tMass(2) = glsc2(vtrans(1,1,1,1,1),bm1,ntot)
+      call col3(hr_flag,t(1,1,1,1,1),vtrans(1,1,1,1,1),ntot)
+      tEnerg(2) = glsc2(hr_flag,bm1,ntot)
+	  elseif(istep.eq.2) then
+      tMass(1) = glsc2(vtrans(1,1,1,1,1),bm1,ntot)
+      call col3(hr_flag,t(1,1,1,1,1),vtrans(1,1,1,1,1),ntot)
+      tEnerg(1) = glsc2(hr_flag,bm1,ntot)
+ 
+      call backwardDifference(dmdt,tMass,dt)
+      call backwardDifference(dhdt,tEnerg,dt)
+      dmdt1 = dmdt/tMass(1) 
+      dhdt1 = dhdt/tEnerg(1) 
+
+      if (nid.eq.0) write(6,*) "dmdt,dmdt1,dhdt,dhdt1"
+      if (nid.eq.0) write(6,*) dmdt,dmdt1,dhdt,dhdt1
+
+	  elseif(istep.gt.2) then
+      tMass(3) = tMass(2)
+      tMass(2) = tMass(1)
+      tMass(1) = glsc2(vtrans(1,1,1,1,1),bm1,ntot)
+      tEnerg(3) = tEnerg(2)
+      tEnerg(2) = tEnerg(1)
+      call col3(hr_flag,t(1,1,1,1,1),vtrans(1,1,1,1,1),ntot)
+      tEnerg(1) = glsc2(hr_flag,bm1,ntot)
+	  
+      call backwardDifference(dmdt,tMass,dt)
+      call backwardDifference(dhdt,tEnerg,dt)
+      dmdt1 = dmdt/tMass(1) 
+      dhdt1 = dhdt/tEnerg(1) 
+
+      if (nid.eq.0) write(6,*) "dmdt,dmdt1,dhdt,dhdt1"
+      if (nid.eq.0) write(6,*) dmdt,dmdt1,dhdt,dhdt1
+      if (nid.eq.0) write(6,*) tEnerg(1),tEnerg(2),tEnerg(3)
+      endif
+	  
+      return
+      end
+c---------------------------------------------------------------------
+      subroutine backwardDifference(ddt,a,dt)
+      real*8 a(3),dt,ddt
+
+      ddt = 1.5*a(1) - 2.0*a(2) + 0.5*a(3)
+      ddt = ddt/dt
+
+      return
+      end
+c---------------------------------------------------------------------
+      subroutine avg_all_co2()
+      include 'SIZE'
+      include 'TOTAL'
+      include 'AVG'
+#     include "co2property/CO2PROP"
+
+      logical ifverbose
+      integer icalld
+      save    icalld
+      data    icalld /0/
+      real*8 varmin,varmax
+      ntot = nx1*ny1*nz1*nelv
+
+      if (icalld.eq.0) then
+         icalld = icalld + 1
+         atime  = 0.
+         timel  = time
+
+         call rzero(rho_avg,ntot)
+         call rzero(T_avg,ntot)
+
+      endif
+
+      dtime = time  - timel
+      atime = atime + dtime
+
+      ! dump freq
+      iastep = param(15) ! same as iostep
+
+      ifverbose=.false.
+      if (istep.le.10) ifverbose=.true.
+      if  (mod(istep,iastep).eq.0) ifverbose=.true.
+
+      if (atime.ne.0..and.dtime.ne.0.) then
+         if(nio.eq.0) write(6,*) 'Compute statistics ...'
+         beta  = dtime/atime
+         alpha = 1.-beta
+         ! compute averages E(X)
+         call avg1(rho_avg,rho_co2,alpha,beta,ntot ,'rho_avg',ifverbose)
+         call avg1(T_avg,T_co2,alpha,beta,ntot ,'T_avg',ifverbose)
+         varmax=glmax(rho_avg,ntot)  
+         varmin=glmin(rho_avg,ntot)
+         if (nid.eq.0) write(6,*) "rho_avg: ",varmin," - ",varmax
+         varmax=glmax(T_avg,ntot)  
+         varmin=glmin(T_avg,ntot)
+         if (nid.eq.0) write(6,*) "T_avg: ",varmin," - ",varmax
+	 endif
+c
+      timel = time
+c
+      return
+      end
+c---------------------------------------------------------------------
+      subroutine get_wall_temp
+c this subroutine calculate avg wall temperature in heating section
+      include 'SIZE'
+      include 'TOTAL'
+#     include "co2property/CO2PROP"
+      common /FACE_CENT/ f_center(ldim,2*ldim,lelv)
+      parameter(nseg = 100)
+      real*8 Tw(nseg),zz(nseg),AA(nseg)
+      real*8 totalArea,TA,ZA
+      real*8 tarea,zarea,aaa
+      logical exist
+
+      ntot = nx1*ny1*nz1*nelv
+
+      startz = 0.001*6.0*2.0
+      segz = 0.03*2.0/dble(nseg)
+
+C integral force at nseg segments.
+      do iseg = 1,nseg
+        totalArea = 0.0
+        TA = 0.0
+        ZA = 0.0
+        zz_bot = startz + dble(iseg-1)*segz
+        zz_top = zz_bot + segz
+        do iel=1,nelv
+        do ifc=1,6
+           id_face = bc(5,ifc,iel,1)
+           if (id_face.eq.3) then
+            zzfc = f_center(3,ifc,iel)
+            if ((zzfc.gt.zz_bot).and.(zzfc.lt.zz_top)) then
+            call surface_int(tarea,aaa,T_avg,iel,ifc)
+            totalArea = totalArea + aaa
+            TA = TA + tarea
+            call surface_int(zarea,aaa,zm1,iel,ifc)
+            ZA = ZA + zarea
+            endif
+           endif
+        enddo 
+        enddo
+        totalArea = glsum(totalArea,1)
+        TA = glsum(TA,1)
+        ZA = glsum(ZA,1)
+
+        Tw(iseg) = TA/totalArea
+        zz(iseg) = ZA/totalArea - startz
+        AA(iseg) = totalArea
+      enddo
+ 	 
+      iostep = param(15)
+      
+c dump averaged force to file at iostep
+      if (nid.eq.0) then
+
+      inquire(file='Tw_avg.dat',exist=exist)
+      if(exist) then 
+        open(58,file='Tw_avg.dat',form='formatted',status='old',
+     &position='rewind',action='write')
+      else
+        open(58,file='Tw_avg.dat',form='formatted',status='new',
+     &action='write')
+      endif
+
+      write(58,'(A)')
+     & '   iseg   L/R  AA  Tw/To  Tw'
+	  
+   10 format(I5,',',F14.10,',',F14.10,',',F14.10,',',F14.10,',',F14.10)
+
+      To = 301.15
+      D_tube = 0.001*2.0
+      R_tube = D_tube/2.0
+
+      do iseg = 1,nseg
+      write(58,10)iseg,zz(iseg)/R_tube,AA(iseg),Tw(iseg)/To,Tw(iseg)
+      enddo
+
+      close(58)      
+
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------

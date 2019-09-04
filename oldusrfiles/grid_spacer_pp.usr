@@ -1,0 +1,877 @@
+C-----------------------------------------------------------------------
+C  nek5000 user-file template
+C
+C  user specified routines:
+C     - userbc : boundary conditions
+C     - useric : initial conditions
+C     - uservp : variable properties
+C     - userf  : local acceleration term for fluid
+C     - userq  : local source term for scalars
+C     - userchk: general purpose routine for checking errors etc.
+C
+C-----------------------------------------------------------------------
+      subroutine uservp(ix,iy,iz,eg) ! set variable properties
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e,f,eg
+      real*8 cfl_local
+      real*8 starty,endy,ratio
+
+      e = gllel(eg)
+ 
+      starty = 0.357
+      endy = 0.359
+      ratio = 200.0
+	  
+      cfl_local = cflf(ix,iy,iz,e)
+
+      utrans = param(1)
+      udiff =  param(2)
+	  
+
+c      if((cfl_local.ge.5.0).and.(cfl_local.lt.7.0)) then
+c      udiff = param(2)*2.5
+c      else if((cfl_local.ge.7.0).and.(cfl_local.lt.9.0)) then
+c      udiff = param(2)*5.0
+c      else if(cfl_local.ge.9.0) then
+c      udiff = param(2)*10.0
+c      endif
+  
+
+c      if ((ym1(ix,iy,iz,e).gt.starty)
+c     &.and.(ym1(ix,iy,iz,e).le.endy))then
+c       udiff = param(2)
+c     &+((ym1(ix,iy,iz,e)-starty)/(endy-starty))*ratio*param(2)
+c      endif
+c      if (ym1(ix,iy,iz,e).gt.endy) then
+c       udiff = param(2) + ratio*param(2)
+c      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userf(ix,iy,iz,eg) ! set acceleration term
+c
+c     Note: this is an acceleration term, NOT a force!
+c     Thus, ffx will subsequently be multiplied by rho(x,t).
+c
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+      common /cforce/ ffx_new,ffy_new,ffz_new
+
+      integer e,f,eg
+      real*8 g
+      e = gllel(eg)
+      g = 9.8 ! m/s2
+
+      ffx = 0.0
+      ffy = 0.0 !ffy_new !-1.0*g
+      ffz = 0.0
+	  
+c      if(ym1(ix,iy,iz,e).lt.-0.01) then
+c      if(ym1(ix,iy,iz,e).gt.-0.04) then
+      ffy = ffy_new
+c      endif
+c      endif
+	  
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userq(ix,iy,iz,eg) ! set source term
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e,f,eg
+c     e = gllel(eg)
+
+      qvol   = 0.0
+      source = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userbc(ix,iy,iz,iside,ieg) ! set up boundary conditions
+c     NOTE ::: This subroutine MAY NOT be called by every process
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      common /cvelbc/ uin(lx1,ly1,lz1,lelt)
+     $              , vin(lx1,ly1,lz1,lelt)
+     $              , win(lx1,ly1,lz1,lelt)
+c$$$     $              , tin(lx1,ly1,lz1,lelt)
+     $              , wscale
+
+      integer ie,ieg
+
+      ie = gllel(ieg)
+
+c      ux = uin(ix,iy,iz,ie)
+c      uy = vin(ix,iy,iz,ie)
+c      uz = win(ix,iy,iz,ie)	! *wscale to save time?
+c$$$      temp=tin(ix,iy,iz,ie)
+      temp = 0.
+ 
+
+      ux = 0.0
+      uy = 5.0
+      uz = 0.0
+C      temp = 0.0
+
+
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine useric(ix,iy,iz,ieg) ! set up initial conditions
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer idum
+      save    idum 
+      data    idum / 0 /
+      
+      if (idum.eq.0) idum = 99 + nid
+      eps = 0.0
+      ux   = 0.0 + eps*(ran1(idum)-.5) 
+      uy   = 5.0 + eps*(ran1(idum)-.5) 
+      uz   = 0.0 + eps*(ran1(idum)-.5) 
+      temp = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userchk()
+      include 'SIZE'
+      include 'TOTAL'
+
+c      common /myoutflow/ d(lx1,ly1,lz1,lelt),m1(lx1*ly1*lz1,lelt)
+c      real m1
+c      rq  = 2.
+c      uin = 0.
+c      call turb_outflow(d,m1,rq,uin)
+
+
+c      character*132  newfld, oldfld, newgfld
+c      data newfld, oldfld, newgfld /'gsbl9pp0.f00002','gsbl4bp0.f00040',
+c     &'gsbl9pp0.f00001'/
+
+c      call g2gi(newfld, oldfld, newgfld) ! grid2grid interpolation
+c      call exitt()
+
+
+      call lambda2(t)
+
+      ifto = .true.
+
+
+      ntot = nx1*ny1*nz1*nelv
+
+
+c      do i=1,ntot
+c      if((ym1(i,1,1,1).le.-0.03).and.(ym1(i,1,1,1).ge.-0.04)) then
+c      vx(i,1,1,1)   = 0.0 ! vx(i,1,1,1) + eps*(ran1(idum)-.5) 
+c      vy(i,1,1,1)   = 5.0 !vy(i,1,1,1) + eps*(ran1(idum)-.5) 
+c      vz(i,1,1,1)   = 0.0 ! vz(i,1,1,1) + eps*(ran1(idum)-.5) 
+c      endif
+c      enddo
+
+      pmax=glmax(pr,ntot)  
+      pmin=glmin(pr,ntot)
+      if (nid.eq.0) write(6,*) "Pressure: ",pmin," - ",pmax 
+
+      vmax=glmax(vy,ntot)
+      vmin=glmin(vy,ntot)
+      if (nid.eq.0) write(6,*) "Velocity y: ",vmin," - ",vmax
+
+      call set_forcing
+
+c      call avg_all()
+      iostep = param(15)
+      if (mod(istep,iostep).eq.0.and.istep.gt.0) then
+      call print_limits
+c      call compute_cfl(cfl,vx,vy,vz,dt)
+c      call outpost(cflf,cflf,cflf,cflf,cflf,'cfl')
+      endif	
+
+      call force_integral
+
+c calculate cfl number, however cflf is the field.
+      call compute_cfl(cfl,vx,vy,vz,dt)
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat()   ! This routine to modify element vertices
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat2()  ! This routine to modify mesh coordinates
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat3()
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+C=======================================================================
+      subroutine force_integral()
+      include 'SIZE'
+      include 'TOTAL'
+
+      integer icalld
+      save    icalld
+      data    icalld /0/
+
+      real atime,timel
+      save atime,timel
+
+      common /FORCE_AVG/ force_avg(3,12),force_rms(3,12),
+     & force_avg_p(3,12),force_rms_p(3,12)
+
+      integer lxyz,lxyze
+      parameter(lxyz=lx1*ly1*lz1,lxyze=lxyz*lelv)
+      integer e,iside
+      integer ix,iy,iz
+      integer ipoint,wpoint
+      real*8 gradu(lx1,ly1,lz1,lelt,3,3)
+      real*8 ud2(lxyze),vd2(lxyze),wd2(lxyze)
+      real*8 force(3,12)
+	  
+      real*8 forceX,forceY,forceZ
+      real*8 forceXp,forceYp,forceZp
+      real*8 R_pin,Rw,centerx,centerz,starty,segy
+      real*8 totalAA,singleAA
+      real*8 tau(3),norm(3),rho,visc,sn1(3),sint2,sarea2
+      real*8 dtime,alpha,beta
+      real*8 T_11,T_12,T_13
+      real*8 T_21,T_22,T_23
+      real*8 T_31,T_32,T_33
+      integer n36
+      logical exist
+      integer ipipe_mask
+	  
+      real*8 f_x(lx1,ly1,lz1,lelt)
+      real*8 f_y(lx1,ly1,lz1,lelt)
+      real*8 f_z(lx1,ly1,lz1,lelt)
+      real*8 f_x_p(lx1,ly1,lz1,lelt)
+      real*8 f_y_p(lx1,ly1,lz1,lelt)
+      real*8 f_z_p(lx1,ly1,lz1,lelt)
+      real*8 flag_w(lx1,ly1,lz1,lelt)
+
+      n36 = 36
+      ntot = nx1*ny1*nz1*nelv
+      call rzero(f_x,ntot)
+      call rzero(f_y,ntot)
+      call rzero(f_z,ntot)
+
+      totalAA = 0.0
+      singleAA = 0.0
+	  
+      R_pin = 0.0095/2.0
+      centerx = (0.0189 + 0.0441)/2.0
+      centerz = (-0.04385 - 0.01865)/2.0
+      starty = 0.03805
+      segy = 25.4E-3
+	  
+      call gradm1(gradu(1,1,1,1,1,1),gradu(1,1,1,1,1,2),
+     &gradu(1,1,1,1,1,3),vx)
+      call gradm1(gradu(1,1,1,1,2,1),gradu(1,1,1,1,2,2),
+     &gradu(1,1,1,1,2,3),vy)
+      call gradm1(gradu(1,1,1,1,3,1),gradu(1,1,1,1,3,2),
+     &gradu(1,1,1,1,3,3),vz)
+
+      call opcolv(gradu(1,1,1,1,1,1),gradu(1,1,1,1,1,2),
+     &gradu(1,1,1,1,1,3),bm1)
+      call opcolv(gradu(1,1,1,1,2,1),gradu(1,1,1,1,2,2),
+     &gradu(1,1,1,1,2,3),bm1)
+      call opcolv(gradu(1,1,1,1,3,1),gradu(1,1,1,1,3,2),
+     &gradu(1,1,1,1,3,3),bm1)
+
+      call opdssum(gradu(1,1,1,1,1,1),gradu(1,1,1,1,1,2),
+     &gradu(1,1,1,1,1,3))
+      call opdssum(gradu(1,1,1,1,2,1),gradu(1,1,1,1,2,2),
+     &gradu(1,1,1,1,2,3))
+      call opdssum(gradu(1,1,1,1,3,1),gradu(1,1,1,1,3,2),
+     &gradu(1,1,1,1,3,3))
+
+      call opcolv(gradu(1,1,1,1,1,1),gradu(1,1,1,1,1,2),
+     &gradu(1,1,1,1,1,3),binvm1)
+      call opcolv(gradu(1,1,1,1,2,1),gradu(1,1,1,1,2,2),
+     &gradu(1,1,1,1,2,3),binvm1)
+      call opcolv(gradu(1,1,1,1,3,1),gradu(1,1,1,1,3,2),
+     &gradu(1,1,1,1,3,3),binvm1)
+	  
+      if(icalld.eq.0) then
+        call rzero(force_avg,n36)
+        call rzero(force_rms,n36)
+        call rzero(force_avg_p,n36)
+        call rzero(force_rms_p,n36)
+        atime = 0.
+        timel = time
+        icalld = 1
+      endif
+
+        dtime = time - timel
+        atime = atime + dtime
+     
+      if (atime.ne.0. .and. dtime.ne.0.) then
+        beta      = dtime/atime
+        alpha     = 1.-beta	  
+
+C integral force at 12 segments.
+      do iseg = 1,12
+
+      forceX = 0.0
+      forceY = 0.0
+      forceZ = 0.0
+	  
+      forceXp = 0.0
+      forceYp = 0.0
+      forceZp = 0.0
+
+      totalAA = 0.0
+
+      call rzero(f_x,ntot)
+      call rzero(f_y,ntot)
+      call rzero(f_z,ntot)
+      call rzero(f_x_p,ntot)
+      call rzero(f_y_p,ntot)
+      call rzero(f_z_p,ntot)
+      call rzero(flag_w,ntot)
+	  
+        do e=1,nelt
+        do iside=1,6
+
+          if (cbc(iside,e,1).eq.'W  ') then
+c==============================
+c if in the area for integration
+cc           call surface_int(sint2,sarea2,xm1,e,iside)
+
+           do ix=1,lx1
+           do iy=1,ly1
+           do iz=1,lz1
+
+             Rw = sqrt((xm1(ix,iy,iz,e)- centerx)**2 + 
+     &(zm1(ix,iy,iz,e) - centerz)**2)
+
+             if(Rw.le.(R_pin+0.001)) then
+             if(ym1(ix,iy,iz,e).ge.(starty+dble(iseg-1)*segy)) then
+             if(ym1(ix,iy,iz,e).le.(starty+dble(iseg)*segy)) then
+
+             visc = param(2) !0.00023
+			 
+             T_11 = gradu(ix,iy,iz,e,1,1) + gradu(ix,iy,iz,e,1,1) 
+             T_12 = gradu(ix,iy,iz,e,1,2) + gradu(ix,iy,iz,e,2,1)
+             T_13 = gradu(ix,iy,iz,e,1,3) + gradu(ix,iy,iz,e,3,1)
+             T_21 = gradu(ix,iy,iz,e,2,1) + gradu(ix,iy,iz,e,1,2)
+             T_22 = gradu(ix,iy,iz,e,2,2) + gradu(ix,iy,iz,e,2,2) 
+             T_23 = gradu(ix,iy,iz,e,2,3) + gradu(ix,iy,iz,e,3,2)
+             T_31 = gradu(ix,iy,iz,e,3,1) + gradu(ix,iy,iz,e,1,3)
+             T_32 = gradu(ix,iy,iz,e,3,2) + gradu(ix,iy,iz,e,2,3) 
+             T_33 = gradu(ix,iy,iz,e,3,3) + gradu(ix,iy,iz,e,3,3)
+			 
+             call getSnormal(sn1,ix,iy,iz,iside,e)
+             f_x(ix,iy,iz,e) = sn1(1)*(-1.0*pr(ix,iy,iz,e)+ 
+     &visc*T_11) +  sn1(2)*visc*T_12 + sn1(3)*visc*T_13
+             f_y(ix,iy,iz,e) = sn1(1)*visc*T_21 + 
+     &sn1(2)*(-1.0*pr(ix,iy,iz,e)+ visc*T_22) + sn1(3)*visc*T_23
+             f_z(ix,iy,iz,e) = sn1(1)*visc*T_31 + sn1(2)*visc*T_32 +
+     &sn1(3)*(-1.0*pr(ix,iy,iz,e)+ visc*T_33)
+
+             f_x_p(ix,iy,iz,e) = sn1(1)*(-1.0*pr(ix,iy,iz,e))
+             f_y_p(ix,iy,iz,e) = sn1(2)*(-1.0*pr(ix,iy,iz,e))
+             f_z_p(ix,iy,iz,e) = sn1(3)*(-1.0*pr(ix,iy,iz,e))
+
+             flag_w(ix,iy,iz,e) = 1.0
+             endif
+             endif
+             endif
+
+           enddo
+           enddo
+           enddo   
+
+          sint2 = 0.0
+          sarea2 = 0.0
+          call surface_int(sint2,sarea2,flag_w,e,iside)
+          totalAA = totalAA + sint2
+
+          sint2 = 0.0
+          sarea2 = 0.0
+          call surface_int(sint2,sarea2,f_x,e,iside)
+          forceX = forceX + sint2
+
+          sint2 = 0.0
+          sarea2 = 0.0
+          call surface_int(sint2,sarea2,f_y,e,iside)
+          forceY = forceY + sint2
+
+          sint2 = 0.0
+          sarea2 = 0.0
+          call surface_int(sint2,sarea2,f_z,e,iside)
+          forceZ = forceZ + sint2
+
+          sint2 = 0.0
+          sarea2 = 0.0
+          call surface_int(sint2,sarea2,f_x_p,e,iside)
+          forceXp = forceXp + sint2
+
+          sint2 = 0.0
+          sarea2 = 0.0
+          call surface_int(sint2,sarea2,f_y_p,e,iside)
+          forceYp = forceYp + sint2
+
+          sint2 = 0.0
+          sarea2 = 0.0
+          call surface_int(sint2,sarea2,f_z_p,e,iside)
+          forceZp = forceZp + sint2
+
+c==============================
+
+          endif
+        enddo
+        enddo
+
+        totalAA = glsum(totalAA,1)
+		
+        forceX = glsum(forceX,1)
+        forceY = glsum(forceY,1)
+        forceZ = glsum(forceZ,1)
+		
+        forceXp = glsum(forceXp,1)
+        forceYp = glsum(forceYp,1)
+        forceZp = glsum(forceZp,1)
+		
+        force(1,iseg) = forceX
+        force(2,iseg) = forceY
+        force(3,iseg) = forceZ
+
+       if (nid.eq.0) write(6,*) "iseg is :",iseg
+       if (nid.eq.0) write(6,*) "totalAA is :",totalAA
+       if (nid.eq.0) write(6,*) "area should be :",0.000758
+       if (nid.eq.0) write(6,*) "forceX is :",forceX
+       if (nid.eq.0) write(6,*) "forceY is :",forceY
+       if (nid.eq.0) write(6,*) "forceZ is :",forceZ
+	
+       if (nid.eq.0) write(6,*) "forceXp is :",forceXp
+       if (nid.eq.0) write(6,*) "forceYp is :",forceYp
+       if (nid.eq.0) write(6,*) "forceZp is :",forceZp
+
+       force_avg(1,iseg) = force_avg(1,iseg)*alpha + forceX*beta
+       force_avg(2,iseg) = force_avg(2,iseg)*alpha + forceY*beta
+       force_avg(3,iseg) = force_avg(3,iseg)*alpha + forceZ*beta
+
+       force_rms(1,iseg) = force_rms(1,iseg)*alpha + forceX**2*beta
+       force_rms(2,iseg) = force_rms(2,iseg)*alpha + forceY**2*beta
+       force_rms(3,iseg) = force_rms(3,iseg)*alpha + forceZ**2*beta
+	   
+       force_avg_p(1,iseg) = force_avg_p(1,iseg)*alpha + forceXp*beta
+       force_avg_p(2,iseg) = force_avg_p(2,iseg)*alpha + forceYp*beta
+       force_avg_p(3,iseg) = force_avg_p(3,iseg)*alpha + forceZp*beta
+
+       force_rms_p(1,iseg) = force_rms_p(1,iseg)*alpha + forceXp**2*beta
+       force_rms_p(2,iseg) = force_rms_p(2,iseg)*alpha + forceYp**2*beta
+       force_rms_p(3,iseg) = force_rms_p(3,iseg)*alpha + forceZp**2*beta	   
+
+
+       if (nid.eq.0) write(6,*) "alpha is :",alpha
+       if (nid.eq.0) write(6,*) "beta is :",beta
+
+      enddo
+      endif
+      timel = time
+c 	 
+      iostep = param(15)
+      
+c dump averaged force to file at iostep
+      if (mod(istep,iostep).eq.0.and.istep.gt.0.and.nid.eq.0) then
+      open(unit=57,file='force_50k.dat')
+      write(57,'(A)')
+     & '   iseg    fx(p)    fx_sqr(p)  fx_var(p)  
+     & fz(p)    fz_sqr(p)    fz_var(p)
+     & fx       fx_sqr    fx_var
+     & fz       fz_sqr    fz_var'
+	  
+   10 format(I5,',',F14.10,',',F14.10,',',F14.10,',',
+     & F14.10,',',F14.10,',',F14.10,',',
+     & F14.10,',',F14.10,',',F14.10,',',
+     & F14.10,',',F14.10,',',F14.10)
+   
+      do iseg = 1,12
+      write(57,10) iseg,
+     & force_avg_p(1,iseg),force_rms_p(1,iseg),
+     & sqrt(force_rms_p(1,iseg)-force_avg_p(1,iseg)**2),
+     & force_avg_p(3,iseg),force_rms_p(3,iseg),
+     & sqrt(force_rms_p(3,iseg)-force_avg_p(3,iseg)**2),
+     & force_avg(1,iseg),force_rms(1,iseg),
+     & sqrt(force_rms(1,iseg)-force_avg(1,iseg)**2),
+     & force_avg(3,iseg),force_rms(3,iseg),
+     & sqrt(force_rms(3,iseg)-force_avg(3,iseg)**2)
+      enddo
+
+      close(57)      
+
+      endif
+
+c dump transient force at each timetep
+   11 format(I5,',',F14.10,',',F14.10,',',F14.10,',',
+     & F14.10,',',F14.10,',',F14.10,',',
+     & F14.10,',',F14.10,',',F14.10,',',
+     & F14.10,',',F14.10,',',F14.10)
+     
+      if (nid.eq.0) then
+
+      inquire(file='force_x.dat',exist=exist)
+      if(exist) then 
+        open(58,file='force_x.dat',form='formatted',status='old',
+     &position='append',action='write')
+      else
+        open(58,file='force_x.dat',form='formatted',status='new',
+     &action='write')
+      endif
+      write(58,11) istep,force(1,1),force(1,2),force(1,3),
+     & force(1,4),force(1,5),
+     & force(1,6),force(1,7),force(1,8),force(1,9),force(1,10),
+     & force(1,11),force(1,12)
+      close(58)
+	  
+      inquire(file='force_y.dat',exist=exist)
+      if(exist) then 
+        open(59,file='force_y.dat',form='formatted',status='old',
+     &position='append',action='write')
+      else
+        open(59,file='force_y.dat',form='formatted',status='new',
+     &action='write')
+      endif
+      write(59,11) istep,force(2,1),force(2,2),force(2,3),
+     & force(2,4),force(2,5),
+     & force(2,6),force(2,7),force(2,8),force(2,9),force(2,10),
+     & force(2,11),force(2,12)
+      close(59)
+	  
+      inquire(file='force_z.dat',exist=exist)
+      if(exist) then 
+        open(60,file='force_z.dat',form='formatted',status='old',
+     &position='append',action='write')
+      else
+        open(60,file='force_z.dat',form='formatted',status='new',
+     &action='write')
+      endif
+      write(60,11) istep,force(3,1),force(3,2),force(3,3),
+     & force(3,4),force(3,5),
+     & force(3,6),force(3,7),force(3,8),force(3,9),force(3,10),
+     & force(3,11),force(3,12)
+      close(60)
+
+      endif  ! if (nid.eq.0)
+
+      return
+      end
+
+C=======================================================================
+      subroutine print_limits
+      include 'SIZE'
+      include 'TOTAL'
+
+
+      integer lxyze
+      parameter(lxyze=lx1*ly1*lz1*lelv)
+
+C     Primitive Variables
+      real umin,umax,vmin,vmax,wmin,wmax,pmin,pmax
+      real hmin,hmax,kmin,kmax,mmin,mmax
+      real rmsu,rmsv,rmsw,rmsp,rmsh,rmsk,rmsm
+      real du,dv,dw,dp,dh,dk,dm
+
+C     other variables
+      real vfmin,vfmax,tempmin,tempmax,mumin,mumax
+      real ypmin,ypmax
+	  
+      common /wDist/ walldist(lx1,ly1,lz1,lelv)
+	  common /property/ dens0,visc0
+c	  data dens0,visc0/992.34d0,6.56d-2/
+
+	 integer n
+
+      n=nx1*ny1*nz1*nelv
+	  
+	  call cheap_dist(walldist,1,'W  ')	 
+      call y_p_limits(walldist,ypmin,ypmax)
+
+      if(nid.eq.0) then
+        write(*,*)
+        write(*,255) 'y_p plus',ypmin,ypmax
+        write(*,*)
+      endif
+
+ 253  format(2x,a16,4es15.5)
+ 254  format(2x,a16,4a15)
+ 255  format(2x,a16,2es15.5)
+
+      return
+      end
+
+C-------------------------------------------------------------------
+      subroutine y_p_limits(wd,ypmin,ypmax)
+      include 'SIZE'
+      include 'TOTAL'
+
+      integer lxyz,lxyze
+      parameter(lxyz=lx1*ly1*lz1,lxyze=lxyz*lelv)
+      integer e,i,i0,i1,j,j0,j1,k,k0,k1,iw,jw,kw,i2
+      integer ipoint,wpoint
+      real gradu(lxyze,3,3),dens(1),visc(1),wd(1)
+      real tau(3),norm(3),rho,mu,vsca,tauw,yp,utau
+      real n_points_wall,n_less_than_one,n_less_than_five
+      real totalAA,singleAA
+   
+      totalAA = 0.0
+      singleAA = 0.0
+
+      n_points_wall = 0.0
+      n_less_than_one = 0.0
+      n_less_than_five = 0.0
+
+      ypmin=1.0d30
+      ypmax=-1.0d30
+
+      call gradm1(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),vx)
+      call gradm1(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),vy)
+      call gradm1(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),vz)
+
+      call opcolv(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),bm1)
+      call opcolv(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),bm1)
+      call opcolv(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),bm1)
+
+      call opdssum(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3))
+      call opdssum(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3))
+      call opdssum(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3))
+
+      call opcolv(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),binvm1)
+      call opcolv(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),binvm1)
+      call opcolv(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),binvm1)
+
+      do e=1,nelv
+        do iside=1,2*ldim
+          if(cbc(iside,e,1).eq.'W  ')then
+
+            i0=1
+            j0=1
+            k0=1
+            i1=lx1
+            j1=ly1
+            k1=lz1
+            if(iside.eq.1) then
+              j0=2
+              j1=2
+            elseif(iside.eq.2) then
+              i0=lx1-1
+              i1=lx1-1
+            elseif(iside.eq.3) then
+              j0=ly1-1
+              j1=ly1-1
+            elseif(iside.eq.4) then
+              i0=2
+              i1=2
+            elseif(iside.eq.5) then
+              k0=2
+              k1=2
+            elseif(iside.eq.6) then
+              k0=lz1-1
+              k1=lz1-1
+            endif
+            do i=i0,i1
+            do j=j0,j1
+            do k=k0,k1
+              iw=i
+              jw=j
+              kw=k
+              if    (iside.eq.1) then
+                jw=1
+                norm(1)=unx(iw,kw,iside,e)
+                norm(2)=uny(iw,kw,iside,e)
+                norm(3)=unz(iw,kw,iside,e)
+                singleAA = area(iw,kw,iside,e)
+              elseif(iside.eq.2) then
+                iw=lx1
+                norm(1)=unx(jw,kw,iside,e)
+                norm(2)=uny(jw,kw,iside,e)
+                norm(3)=unz(jw,kw,iside,e)
+                singleAA = area(jw,kw,iside,e)
+              elseif(iside.eq.3) then
+                jw=ly1
+                norm(1)=unx(iw,kw,iside,e)
+                norm(2)=uny(iw,kw,iside,e)
+                norm(3)=unz(iw,kw,iside,e)
+                singleAA = area(iw,kw,iside,e)
+              elseif(iside.eq.4) then
+                iw=1
+                norm(1)=unx(jw,kw,iside,e)
+                norm(2)=uny(jw,kw,iside,e)
+                norm(3)=unz(jw,kw,iside,e)
+                singleAA = area(jw,kw,iside,e)
+              elseif(iside.eq.5) then
+                kw=1
+                norm(1)=unx(iw,jw,iside,e)
+                norm(2)=uny(iw,jw,iside,e)
+                norm(3)=unz(iw,jw,iside,e)
+                singleAA = area(iw,jw,iside,e)
+              else
+                kw=lx1
+                norm(1)=unx(iw,jw,iside,e)
+                norm(2)=uny(iw,jw,iside,e)
+                norm(3)=unz(iw,jw,iside,e)
+                singleAA = area(iw,jw,iside,e)
+              endif
+              ipoint=i+(j-1)*lx1+(k-1)*lx1*ly1+(e-1)*lxyz
+              wpoint=iw+(jw-1)*lx1+(kw-1)*lx1*ly1+(e-1)*lxyz
+c              if(iflomach) then
+c                mu=visc(wpoint)
+c                rho=dens(wpoint)
+c              else
+               mu=param(2)
+               rho=param(1)
+c              endif
+
+              do i2=1,ldim
+              tau(i2)=0.0
+                do j2=1,ldim
+                  tau(i2)=tau(i2)+
+     &             mu*(gradu(wpoint,i2,j2)+gradu(wpoint,j2,i2))*norm(j2)
+                enddo
+              enddo
+
+              vsca=0.0
+              do i2=1,ldim
+                vsca=vsca+tau(i2)*norm(i2)
+              enddo
+
+              tauw=0.0
+              do i2=1,ldim
+                tauw=tauw+(tau(i2)-vsca*norm(i2))**2
+              enddo
+              tauw=sqrt(tauw)
+              utau=sqrt(tauw/rho)
+              yp=wd(ipoint)*utau*rho/mu
+              if(yp.gt.0) ypmin=min(ypmin,yp)
+              ypmax=max(ypmax,yp)
+
+              if(ym1(wpoint,1,1,1).gt.0.056) then
+              n_points_wall = n_points_wall + 1.0
+              if(yp.le.1.0) n_less_than_one = n_less_than_one + 1.0
+              if(yp.le.5.0) n_less_than_five= n_less_than_five+ 1.0
+              endif
+  
+              totalAA = totalAA + singleAA
+            enddo
+            enddo
+            enddo
+          endif
+        enddo
+      enddo
+
+      ypmin=glmin(ypmin,1)
+      ypmax=glmax(ypmax,1)
+
+      n_points_wall = glsum(n_points_wall,1)
+      n_less_than_one = glsum(n_less_than_one,1)
+      n_less_than_five = glsum(n_less_than_five,1)
+      totalAA = glsum(totalAA,1) 
+
+      if (nid.eq.0) write(6,*) "n_points_wall is :",n_points_wall
+      if (nid.eq.0) write(6,*) "n_less_than_one is :",n_less_than_one
+      if (nid.eq.0) write(6,*) "n_less_than_five is :",n_less_than_five
+
+      ratio = n_less_than_one/n_points_wall
+      if (nid.eq.0) write(6,*) "ratio less than 1.0 is :",ratio         
+      ratio = n_less_than_five/n_points_wall
+      if (nid.eq.0) write(6,*) "ratio less than 5.0 is :",ratio 
+  
+      if (nid.eq.0) write(6,*) "total wetted area is: ", totalAA
+      
+      return
+      end
+cc-----------------------------------------------------------------------
+c-----------------------------------------------------------------------
+      subroutine set_forcing  ! set driving force to maintain bulk velocity
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      common /cforce/ ffx_new,ffy_new,ffz_new
+      common /uforce/ utldo(ldim)
+
+      real*8 flag(lx1,ly1,lz1,lelt),vflag(lx1,ly1,lz1,lelt)
+      real*8 u_targ,vol
+      real*8 f_new
+
+      ntot=nx1*ny1*nz1*nelv
+
+      u_targ = 5.0 ! target velocity 5 m/s, in y direction
+
+      if (istep.eq.0) f_new=param(71)  ! Update forcing for Ubar = 1
+
+      do i = 1,ntot
+       flag(i,1,1,1) = 0.0
+       vflag(i,1,1,1) = 0.0
+       if(ym1(i,1,1,1).ge.0.1) then
+       flag(i,1,1,1) = 1.0
+       vflag(i,1,1,1) = vy(i,1,1,1)
+       endif
+      enddo
+
+      vol = glsc2(flag,bm1,ntot)
+      ubar    = glsc2(vflag,bm1,ntot)/vol
+      utilde  = ubar/u_targ
+
+
+      if (istep.gt.0) f_new = 0.5 * (f_new + f_new/utilde)
+
+      if (istep.gt.5) then
+         alpha = abs(utilde-utldo(idir))/dt
+         alpha = min(alpha,0.02)
+         if     (utilde.gt.1.and.utilde.gt.utldo(idir)) then
+                ! if ubar is larger than u_targ, decrease force term
+            f_new = (1-alpha)*f_new
+         elseif (utilde.lt.1.and.utilde.lt.utldo(idir)) then
+                ! if ubar is less than u_targ, increase force term.
+            f_new = (1+alpha)*f_new
+         endif
+      endif
+      utldo(idir)   = utilde
+
+      f_min = 1.0e-6                 ! ad hoc limits
+      f_new = max(f_new,f_min)
+
+      f_max = 2.0e+3                 ! ad hoc limits
+      f_new = min(f_new,f_max)
+
+      if(nid.eq.0) write(6,*) 'seting force for flow'
+      if(nid.eq.0) write(6,*) 'u bar is ', ubar
+      if(nid.eq.0) write(6,*) 'driving force is ', f_new
+
+      ffy_new = f_new
+
+      return
+      end
+c-----------------------------------------------------------------------
+c
+c automatically added by makenek
+      subroutine usrsetvert(glo_num,nel,nx,ny,nz) ! to modify glo_num
+      integer*8 glo_num(1)
+      return
+      end

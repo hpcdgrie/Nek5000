@@ -1,0 +1,474 @@
+c---------------------------------------------------------------------
+      subroutine avg_all_turb()
+c take time averaging of turb stat
+      include 'SIZE'
+      include 'TOTAL'
+      include 'AVG'
+#     include "TURBSTAT"
+#     include "../co2property/CO2PROP"
+
+      real             atime_tt,timel_tt
+      common /avgturb/ atime_tt,timel_tt
+ 
+      real alpha,beta
+
+      logical ifverbose
+      integer icalld
+      save    icalld
+      data    icalld /0/
+
+      real*8 varmin,varmax
+      	  
+      ntot = nx1*ny1*nz1*nelv
+	  
+      if(nid.eq.0) write (6,*) "calling turb_stat"
+	  
+      call convert_coord()
+
+      if (icalld.eq.0) then
+         icalld = icalld + 1
+         atime_tt  = 0.
+         timel_tt  = time
+
+         call rzero(uza,ntot)
+         call rzero(ura,ntot)
+         call rzero(upa,ntot)
+         call rzero(uz2a,ntot)
+         call rzero(uzura,ntot)
+         call rzero(uzupa,ntot)
+         call rzero(ur2a,ntot)
+         call rzero(urupa,ntot)
+         call rzero(up2a,ntot)
+         call rzero(uzha,ntot)
+         call rzero(urha,ntot)
+         call rzero(upha,ntot)
+         call rzero(ha,ntot)
+         call rzero(h2a,ntot)
+         call rzero(ruza,ntot)
+         call rzero(rura,ntot)
+         call rzero(rupa,ntot)
+         call rzero(rha,ntot)
+         call rzero(ruz2a,ntot)
+         call rzero(ruzura,ntot)
+         call rzero(ruzupa,ntot)
+         call rzero(rur2a,ntot)
+         call rzero(rurupa,ntot)
+         call rzero(rup2a,ntot)
+         call rzero(rh2a,ntot)
+         call rzero(rhuza,ntot)
+         call rzero(rhura,ntot)
+         call rzero(rhupa,ntot)
+         call rzero(tke,ntot)
+         call rzero(eps,ntot)
+         call rzero(omg,ntot)
+
+         call rzero(rta,ntot)
+         call rzero(mua,ntot)
+
+      endif
+
+      dtime_tt = time  - timel_tt
+      atime_tt = atime_tt + dtime_tt
+
+      ! dump freq
+      iastep = param(15) ! same as iostep
+
+      ifverbose=.false.
+      if (istep.le.10) ifverbose=.true.
+      if  (mod(istep,iastep).eq.0) ifverbose=.true.
+
+      if (atime_tt.ne.0..and.dtime_tt.ne.0.) then
+      if(nio.eq.0) write(6,*) 'Compute statistics ...'
+      beta  = dtime_tt/atime_tt
+      alpha = 1.-beta
+
+      if (nid.eq.0) write(6,*) 'alpha-beta ',alpha,' - ',beta
+
+      call avg1(uza,vz,alpha,beta,ntot ,'uza',ifverbose)
+      call avg1(ura,ur,alpha,beta,ntot ,'ura',ifverbose)
+      call avg1(upa,up,alpha,beta,ntot ,'upa',ifverbose) 
+
+      call avg2(uz2a,vz,alpha,beta,ntot ,'uz2a',ifverbose)
+      call avg3(uzura,vz,ur,alpha,beta,ntot,'uzura',ifverbose)
+      call avg3(uzupa,vz,up,alpha,beta,ntot,'uzupa',ifverbose)
+      call avg2(ur2a,ur,alpha,beta,ntot ,'ur2a',ifverbose)
+      call avg3(urupa,ur,up,alpha,beta,ntot,'urupa',ifverbose)
+      call avg2(up2a,up,alpha,beta,ntot ,'up2a',ifverbose)
+
+      call avg3(uzha,vz,t,alpha,beta,ntot,'uzha',ifverbose)
+      call avg3(urha,ur,t,alpha,beta,ntot,'urha',ifverbose)
+      call avg3(upha,up,t,alpha,beta,ntot,'upha',ifverbose)
+
+      call avg1(ha,t,alpha,beta,ntot ,'ha',ifverbose)
+      call avg2(h2a,t,alpha,beta,ntot ,'h2a',ifverbose)
+
+      call avg3(ruza,vz,rho_co2,alpha,beta,ntot,'ruza',ifverbose)
+      call avg3(rura,ur,rho_co2,alpha,beta,ntot,'rura',ifverbose)
+      call avg3(rupa,up,rho_co2,alpha,beta,ntot,'rupa',ifverbose)
+      call avg3(rha,t,rho_co2,alpha,beta,ntot,'rha',ifverbose)
+
+      call avg4(ruz2a,vz,vz,rho_co2,alpha,beta,ntot,'ruz2a',ifverbose)
+      call avg4(ruzura,vz,ur,rho_co2,alpha,beta,ntot,'ruzura',ifverbose)
+      call avg4(ruzupa,vz,up,rho_co2,alpha,beta,ntot,'ruzupa',ifverbose)
+      call avg4(rur2a,ur,ur,rho_co2,alpha,beta,ntot,'rur2a',ifverbose)
+      call avg4(rurupa,ur,up,rho_co2,alpha,beta,ntot,'rurupa',ifverbose)
+      call avg4(rup2a,up,up,rho_co2,alpha,beta,ntot,'rup2a',ifverbose)
+
+      call avg4(rh2a,t,t,rho_co2,alpha,beta,ntot,'rh2a',ifverbose)
+      call avg4(rhuza,t,vz,rho_co2,alpha,beta,ntot,'rhuza',ifverbose)
+      call avg4(rhura,t,ur,rho_co2,alpha,beta,ntot,'rhura',ifverbose)
+      call avg4(rhupa,t,up,rho_co2,alpha,beta,ntot,'rhupa',ifverbose)
+       
+      call avg3(rta,T_co2,rho_co2,alpha,beta,ntot ,'rta',ifverbose)
+      call avg1(mua,visc_co2,alpha,beta,ntot ,'mua',ifverbose)
+
+      endif
+c
+      timel_tt = time
+c
+      iostep = param(15)
+      if((istep.gt.0).and.(mod(istep,iostep).eq.0)) then
+       call  dump_turb_stat()
+c       call  outpost(vx,ur,up,pr,t,'zrp')
+c       call  outpost(uza,ura,upa,pr,t,'zrp')
+      endif
+
+      varmax=glmax(uza,ntot)
+      varmin=glmin(uza,ntot)
+      if (nid.eq.0) write(6,*) "uza: ",varmin," - ",varmax
+
+
+      if(nid.eq.0) write (6,*) "done: turb_stat"
+
+      return
+      end
+c---------------------------------------------------------------------
+      subroutine dump_turb_stat()
+c interpolate and dump turbulence statisica data 
+      include 'SIZE'
+      include 'TOTAL'
+#     include "TURBSTAT"
+#     include "../co2property/CO2PROP"
+
+      parameter(nzpl=11,nrpl=100,nppl=36)
+      parameter(nint=nzpl*nrpl*nppl)
+
+       real xyz(3,nint),intvar(3,nint),yr(nrpl),
+     $ uza_d(nrpl,nzpl),ura_d(nrpl,nzpl),upa_d(nrpl,nzpl),
+     $ uz2a_d(nrpl,nzpl),uzura_d(nrpl,nzpl),uzupa_d(nrpl,nzpl),
+     $ ur2a_d(nrpl,nzpl),urupa_d(nrpl,nzpl),up2a_d(nrpl,nzpl),
+     $ uzha_d(nrpl,nzpl),urha_d(nrpl,nzpl),upha_d(nrpl,nzpl),
+     $ ha_d(nrpl,nzpl),h2a_d(nrpl,nzpl),
+     $ ruza_d(nrpl,nzpl),rura_d(nrpl,nzpl),rupa_d(nrpl,nzpl),
+     $ rha_d(nrpl,nzpl),ruz2a_d(nrpl,nzpl),ruzura_d(nrpl,nzpl),
+     $ ruzupa_d(nrpl,nzpl),rur2a_d(nrpl,nzpl),rurupa_d(nrpl,nzpl),
+     $ rup2a_d(nrpl,nzpl),rh2a_d(nrpl,nzpl),rhuza_d(nrpl,nzpl),
+     $ rhura_d(nrpl,nzpl),rhupa_d(nrpl,nzpl),
+     $ ra_d(nrpl,nzpl),ta_d(nrpl,nzpl),rta_d(nrpl,nzpl),
+     $ mua_d(nrpl,nzpl)
+
+      integer n_interp,fileid
+      integer in,ir,iz,iphi
+      character*80 nzplanefilename
+      real radius,length,startz
+
+      radius = 0.001/2.0
+      length = 2.0*radius*30.0
+      startz = 2.0*radius*6.0
+
+      n_interp =0
+      pi = 3.1415926
+
+      if(nid.eq.0) then
+
+      n_interp = nint
+      do iz=1,nzpl
+      do ir=1,nrpl
+      do iphi=1,nppl
+      in =(iz-1)*nrpl*nppl + (ir-1)*nppl + iphi
+      alpha1 = 2*pi*dble(iphi)/dble(nppl)
+      rr =(1.0-(dble(ir)/dble(nrpl+1))**3.0)*radius ! should use log distribution.
+      yr(ir) = (radius - rr)/radius
+
+      xyz(1,in) = rr*cos(alpha1)
+      xyz(2,in) = rr*sin(alpha1)
+      xyz(3,in) = startz + length*dble(iz)/dble(nzpl+1)
+      enddo
+      enddo
+      enddo
+
+      endif
+
+      call interp_usr(intvar,xyz,n_interp,uza,ura,upa)
+      if(nid.eq.0) call avg_in_phi(intvar,uza_d,ura_d,upa_d)
+	  
+      call interp_usr(intvar,xyz,n_interp,uz2a,uzura,uzupa)
+      if(nid.eq.0) call avg_in_phi(intvar,uz2a_d,uzura_d,uzupa_d)
+
+      call interp_usr(intvar,xyz,n_interp,ur2a,urupa,up2a)
+      if(nid.eq.0) call avg_in_phi(intvar,ur2a_d,urupa_d,up2a_d)
+	  
+      call interp_usr(intvar,xyz,n_interp,uzha,urha,upha)
+      if(nid.eq.0) call avg_in_phi(intvar,uzha_d,urha_d,upha_d)
+	 
+      call interp_usr(intvar,xyz,n_interp,ha,h2a,upha)
+      if(nid.eq.0) call avg_in_phi(intvar,ha_d,h2a_d,upha_d)
+	  
+      call interp_usr(intvar,xyz,n_interp,ruza,rura,rupa)
+      if(nid.eq.0) call avg_in_phi(intvar,ruza_d,rura_d,rupa_d)
+	  
+      call interp_usr(intvar,xyz,n_interp,rha,ruz2a,ruzura)
+      if(nid.eq.0) call avg_in_phi(intvar,rha_d,ruz2a_d,ruzura_d)
+	  
+      call interp_usr(intvar,xyz,n_interp,ruzupa,rur2a,rurupa)
+      if(nid.eq.0) call avg_in_phi(intvar,ruzupa_d,rur2a_d,rurupa_d)
+
+      call interp_usr(intvar,xyz,n_interp,rup2a,rh2a,rhuza)
+      if(nid.eq.0) call avg_in_phi(intvar,rup2a_d,rh2a_d,rhuza_d)
+	  	  
+      call interp_usr(intvar,xyz,n_interp,rhuza,rhura,rhupa)
+      if(nid.eq.0) call avg_in_phi(intvar,rhuza_d,rhura_d,rhupa_d)
+
+      call interp_usr(intvar,xyz,n_interp,rho_avg,T_avg,rta)
+      if(nid.eq.0) call avg_in_phi(intvar,ra_d,ta_d,rta_d)
+	  
+      call interp_usr(intvar,xyz,n_interp,rho_avg,T_avg,mua)
+      if(nid.eq.0) call avg_in_phi(intvar,ra_d,ta_d,mua_d)
+
+c dump data to files
+
+	  
+  111 format(I5,',',F14.10,',',F14.10,',',
+     & F14.6,',',F14.6,',',F14.6,',',F14.10,',',
+     & F14.10,',',F14.10,',',F14.10,',',
+     & F14.10,',',F14.10,',',F14.10,',',
+     & F14.10,',',F14.10,',',F14.10,',',
+     & F14.4,',',F14.4,',',F14.4,',',
+     & F14.4,',',F14.4,',',
+     & F14.8,',',F14.10,',',F14.10,',',
+     & F14.4,',',F14.8,',',F14.10,',',
+     & F14.10,',',F14.10,',',F14.10,',',
+     & F14.10,',',F14.4,',',F14.4,',',
+     & F14.4,',',F14.4)
+
+  112  format(a,i1.1,a)
+  113  format(a,i2.2,a)
+	 
+       fileid = 100	 
+
+      if(nid.eq.0) then
+       do iz=1,nzpl ! dump each file for z plane
+       fileid = 100 + iz
+
+       if(iz.lt.10) write(nzplanefilename,112) 'nzplane_',iz,'.dat'
+       if(iz.ge.10) write(nzplanefilename,113) 'nzplane_',iz,'.dat'
+
+       open(unit=fileid,file=nzplanefilename)
+
+       write(fileid,'(A)')
+     & 'ir,r/R,Y/R,
+     & ra,ta,rta,mua
+     & uza,ura,upa,
+     & uz2a,uzura,uzupa,
+     & ur2a,urupa,up2a,
+     & uzha,urha,upha,
+     & ha,h2a/1e6,
+     & ruza,rura,rupa,
+     & rha,ruz2a,ruzura,
+     & ruzupa,rur2a,rurupa,
+     & rup2a,rh2a/1e6,rhuza,
+     & rhura,rhupa'
+
+        do ir = 1,nrpl
+		write(fileid,111) ir,1.0-yr(ir),yr(ir),
+     & ra_d(ir,iz),ta_d(ir,iz),rta_d(ir,iz),mua_d(ir,iz),
+     & uza_d(ir,iz),ura_d(ir,iz),upa_d(ir,iz),
+     & uz2a_d(ir,iz),uzura_d(ir,iz),uzupa_d(ir,iz),
+     & ur2a_d(ir,iz),urupa_d(ir,iz),up2a_d(ir,iz),
+     & uzha_d(ir,iz),urha_d(ir,iz),upha_d(ir,iz),
+     & ha_d(ir,iz),h2a_d(ir,iz)/1e6,
+     & ruza_d(ir,iz),rura_d(ir,iz),rupa_d(ir,iz),
+     & rha_d(ir,iz),ruz2a_d(ir,iz),ruzura_d(ir,iz),
+     & ruzupa_d(ir,iz),rur2a_d(ir,iz),rurupa_d(ir,iz),
+     & rup2a_d(ir,iz),rh2a_d(ir,iz)/1e6,rhuza_d(ir,iz),
+     & rhura_d(ir,iz),rhupa_d(ir,iz)
+		enddo
+        close(fileid)
+
+        enddo
+      endif
+
+      return
+      end
+c---------------------------------------------------------------------
+      subroutine convert_coord()
+c convert intantaneous velocity to cylindrical system 
+      include 'SIZE'
+      include 'TOTAL'
+#     include "TURBSTAT"
+
+      real xx,yy,rr,cosa,sina
+      real vxx1,vyy1 
+
+      if(nid.eq.0) write (6,*) "calling convert_coord"
+
+c vx,vy -> ur,up
+      ntot = nx1*ny1*nz1*nelv
+
+      do i=1,ntot
+       xx = xm1(i,1,1,1)
+       yy = ym1(i,1,1,1)
+       rr = sqrt(xx**2.0 + yy**2.0)
+       if(rr.ge.1e-6) then
+       cosa = xx/rr
+       sina = yy/rr
+
+       vxx1 = vx(i,1,1,1)
+       vyy1 = vy(i,1,1,1)
+
+       ur(i,1,1,1) = cosa*vxx1 + sina*vyy1
+       up(i,1,1,1) = -sina*vxx1 + cosa*vyy1
+       else
+       ur(i,1,1,1) = vx(i,1,1,1)
+       up(i,1,1,1) = vy(i,1,1,1)
+       endif
+
+      enddo
+
+      if(nid.eq.0)  write (6,*) "done: convert_coord"
+
+      return
+      end
+c---------------------------------------------------------------------
+c-----------------------------------------------------------------------
+      subroutine interp_usr(uvw,xyz,n,f1,f2,f3)
+c
+c     evaluate velocity for list of points xyz
+c
+      include 'SIZE'
+      include 'TOTAL'
+
+      parameter(INTP_NMAX=60000)
+
+      real uvw(ldim,n),xyz(ldim,n)
+      real*8 f1(lx1,ly1,lz1,lelt)
+      real*8 f2(lx1,ly1,lz1,lelt)
+      real*8 f3(lx1,ly1,lz1,lelt)
+
+      real    rwk(INTP_NMAX,ldim+1) ! r, s, t, dist2
+      integer iwk(INTP_NMAX,3)      ! code, proc, el
+      save    rwk, iwk
+
+      integer intp_h
+      save    intp_h
+
+      common /rwk_intp/ 
+     $       fwrk(lx1*ly1*lz1*lelt,ldim),
+     $       fpts(ldim*INTP_NMAX),
+     $       pts(ldim*INTP_NMAX)
+
+      integer icalld,e
+      save    icalld
+      data    icalld /0/
+
+      nxyz  = nx1*ny1*nz1
+      ntot  = nxyz*nelt
+
+      if (n.gt.INTP_NMAX) call exitti ('n > INTP_NMAX in interp_v!$',n)
+      
+      if (nelgt.ne.nelgv) call exitti
+     $   ('nelgt.ne.nelgv not yet supported in interp_v!$',nelgv)
+
+      do i=1,n				! ? not moving -> save?
+         pts(i)     = xyz(1,i)
+         pts(i + n) = xyz(2,i)
+         if (if3d) pts(i + n*2) = xyz(3,i)
+      enddo
+
+      if (icalld.eq.0) then
+        icalld = 1
+        call interp_setup(intp_h,0.0,0,nelt)
+      endif
+
+      ! pack working array
+c      call opcopy(fwrk(1,1),fwrk(1,2),fwrk(1,3),vx,vy,vz)
+      call opcopy(fwrk(1,1),fwrk(1,2),fwrk(1,3),f1,f2,f3)
+	  
+c      varmax=glmax(f1,ntot)  
+c      varmin=glmin(f1,ntot)
+c      if (nid.eq.0) write(6,*) "f1: ",varmin," - ",varmax
+
+c      varmax=glmax(f2,ntot)  
+c      varmin=glmin(f2,ntot)
+c      if (nid.eq.0) write(6,*) "f2: ",varmin," - ",varmax
+
+c      varmax=glmax(f3,ntot)  
+c      varmin=glmin(f3,ntot)
+c      if (nid.eq.0) write(6,*) "f3: ",varmin," - ",varmax
+
+	  
+      ! interpolate
+      call interp_nfld(fpts,fwrk,ndim,pts(1),pts(1+n),pts(2*n+1),
+     $                 n,iwk,rwk,INTP_NMAX,.true.,intp_h)
+
+      do i=1,n
+         uvw(1,i) = fpts(i)
+         uvw(2,i) = fpts(i + n)
+         if(if3d) uvw(3,i) = fpts(i + n*2)
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
+c-----------------------------------------------------------------------
+      subroutine avg_in_phi(var,d1,d2,d3)
+      include 'SIZE'
+      include 'TSTEP'
+      parameter(nzpl =11,nrpl = 100,nppl = 36)
+      parameter(nint=nzpl*nrpl*nppl)
+      real var(3,nint)
+      real d1(nrpl,nzpl),d2(nrpl,nzpl),d3(nrpl,nzpl)
+      integer in,iz,ir,iphi
+
+      call rzero(d1,nrpl*nzpl)
+      call rzero(d2,nrpl*nzpl)
+      call rzero(d3,nrpl*nzpl)
+
+      do iz=1,nzpl
+      do ir=1,nrpl
+      do iphi=1,nppl
+      in =(iz-1)*nrpl*nppl + (ir-1)*nppl + iphi
+      d1(ir,iz) =  d1(ir,iz) + var(1,in)/dble(nppl)
+      d2(ir,iz) =  d2(ir,iz) + var(2,in)/dble(nppl)
+      d3(ir,iz) =  d3(ir,iz) + var(3,in)/dble(nppl)
+      enddo
+      enddo
+      enddo
+
+      return
+      end
+
+c-----------------------------------------------------------------------
+      subroutine avg4(avg,f,g,h,alpha,beta,n,name,ifverbose)
+      include 'SIZE'
+      include 'TSTEP'
+c
+      real avg(n),f(n),g(n),h(n)
+      character*4 name
+      logical ifverbose
+c
+      do k=1,n
+         avg(k) = alpha*avg(k) + beta*f(k)*g(k)*h(k)
+      enddo
+c
+      if (ifverbose) then
+         avgmax = glmax(avg,n)
+         avgmin = glmin(avg,n)
+         if (nio.eq.0) write(6,1) istep,time,avgmin,avgmax
+     $                           ,alpha,beta,name
+    1    format(i9,1p5e13.5,1x,a4,' av3mnx')
+      endif
+c
+      return
+      end
+c----------------------------------------------------------------------

@@ -9,10 +9,17 @@
      $       eps(lxyze)
       common /TKEEPS/ tke,eps
 	  
-	  real*8 meshsize(lx1,ly1,lz1,lelt),
+
+      real*8 meshsize(lx1,ly1,lz1,lelt),
      $       tay_scale(lxyze),
      $       tay_ratio(lxyze),
      $       kol_scale(lxyze),
      $       kol_ratio(lxyze)
       common /MESHSIZE/ meshsize,tay_scale,tay_ratio
      $ kol_scale,kol_ratio
+
+      real*8 uta(lx1,ly1,lz1,lelt),
+     $       vta(lx1,ly1,lz1,lelt),
+     $       wta(lx1,ly1,lz1,lelt)
+      common /MESHSIZE/ uta,vta,wta
+

@@ -26,8 +26,7 @@ c also calualte velocity gradient tensor for epsilon calculation.
       ntot  = lx1*ly1*lz1*nelv
       ntott = lx1*ly1*lz1*nelt
       nto2  = lx2*ly2*lz2*nelv
- 
-	  ntot9 = ntot*9
+      ntot9 = ntot*9
 	  
       ! initialization
       if (icalld.eq.0) then
@@ -55,9 +54,14 @@ c also calualte velocity gradient tensor for epsilon calculation.
          call rzero(wums,ntot)
          call rzero(uvms,ntot)
 
-
          call rzero(gradu_avg,ntot9)
          call rzero(gradu2_avg,ntot9)
+
+         if(IFHEAT) then
+            call rzero(uta,ntot)
+            call rzero(vta,ntot)
+            call rzero(wta,ntot)
+         endif
 
       endif
 
@@ -111,6 +115,13 @@ c      if  (iastep.eq.0) iastep=500
          ! compute velocity gradient avg and avg2
         call avg1(gradu_avg,gradu,alpha,beta,ntot9,'gu1',ifverbose)
         call avg2(gradu2_avg,gradu,alpha,beta,ntot9,'gu2',ifverbose)
+
+        if(IFHEAT) then
+         call avg3    (uta,vx,t,alpha,beta,ntot,'uta',ifverbose)
+         call avg3    (vta,vy,t,alpha,beta,ntot,'vta',ifverbose)
+         call avg3    (wta,vz,t,alpha,beta,ntot,'wta',ifverbose)
+        endif
+
       endif
 c
 c-----------------------------------------------------------------------
@@ -126,6 +137,10 @@ c         time      = atime   ! Output the duration of this avg
          call outpost2(uavg,vavg,wavg,pavg,tavg,ldimt,'avg')
          call outpost2(urms,vrms,wrms,prms,trms,ldimt,'rms')
          call outpost2(uvms,vwms,wums,tke,eps,ldimt,'rm2')
+
+         if(IFHEAT) then
+         call outpost2(uta,vta,wta,tke,eps,ldimt,'thf')
+         endif
 
          param(63) = dtmp
 c         atime = 0.
@@ -184,7 +199,7 @@ c calculate epsilon
 
         eps(i) = 0.0
 
-	    do j = 1,3
+        do j = 1,3
         do k = 1,3
         eps(i)=eps(i)+(gradu2_avg(i,j,k)-gradu_avg(i,j,k)**2)
         enddo

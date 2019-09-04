@@ -1,0 +1,343 @@
+#include "recycle/recycle.usr"
+#include "co2property/co2property_poly.f"
+#include "convective/convective.usr"
+#include "co2property/qtl_co2.f"
+#include "co2nek2.usr"
+#include "turb_stat/turb_stat.usr"
+
+c-----------------------------------------------------------------------
+c  nek5000 user-file template
+c
+c  user specified routines:
+c     - uservp  : variable properties
+c     - userf   : local acceleration term for fluid
+c     - userq   : local source term for scalars
+c     - userbc  : boundary conditions
+c     - useric  : initial conditions
+c     - userchk : general purpose routine for checking errors etc.
+c     - userqtl : thermal divergence for lowMach number flows 
+c     - usrdat  : modify element vertices 
+c     - usrdat2 : modify mesh coordinates
+c     - usrdat3 : general purpose routine for initialization
+c     
+c-----------------------------------------------------------------------
+      subroutine uservp(ix,iy,iz,eg) ! set variable properties
+
+c      implicit none
+
+      integer ix,iy,iz,eg
+     
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+#     include "co2property/CO2PROP"
+
+      integer e
+      real*8 h_usr,rho_usr,mu_usr,alpha_usr,beta_usr,T_usr
+      e = gllel(eg)
+
+      h_usr = temp
+c      call fitph(h_usr,T_usr,rho_usr,mu_usr,alpha_usr,beta_usr) ! FIT , slow. why ? because I used f2003 rathern than f90 ??
+      call properties_co2(h_usr,rho_usr,mu_usr,alpha_usr,beta_usr,T_usr)
+	  
+      if(ifield.eq.1) then
+c      udiff = 6.075E-5 ! viscosity
+c      utrans= 736.5   ! density
+      udiff = mu_usr ! viscosity
+      utrans= rho_usr   ! density
+      endif
+	  
+      if(ifield.eq.2) then
+c      udiff = 6.075E-5 ! alpha = kappa/Cp
+c      utrans= 736.5   ! density
+      udiff = alpha_usr ! alpha = kappa/Cp
+      utrans= rho_usr   ! density
+      endif
+
+c assign property to CO2PROP 
+      beta_co2(ix,iy,iz,e) = beta_usr
+      rho_co2(ix,iy,iz,e) = rho_usr
+      visc_co2(ix,iy,iz,e) = mu_usr
+      alpha_co2(ix,iy,iz,e) = alpha_usr
+      T_co2(ix,iy,iz,e) = T_usr
+	  
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userf(ix,iy,iz,eg) ! set acceleration term
+c
+c     Note: this is an acceleration term, NOT a force!
+c     Thus, ffx will subsequently be multiplied by rho(x,t).
+c
+c      implicit none
+
+      integer ix,iy,iz,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e
+c     e = gllel(eg)
+
+      ffx = 0.0
+      ffy = 0.0
+      ffz = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userq(ix,iy,iz,eg) ! set source term
+
+c      implicit none
+
+      integer ix,iy,iz,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e
+c     e = gllel(eg)
+
+      qvol   = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userbc(ix,iy,iz,iside,eg) ! set up boundary conditions
+c
+c     NOTE ::: This subroutine MAY NOT be called by every process
+c
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      common /FACE_CENT/ f_center(ldim,2*ldim,lelv)
+
+      logical iffield
+      common /lvelbc/ iffield(ldimt)
+
+      common /cvelbc/ uin(lx1,ly1,lz1,lelv)
+     $              , vin(lx1,ly1,lz1,lelv)
+     $              , win(lx1,ly1,lz1,lelv)
+     $              , tin(lx1,ly1,lz1,lelt,ldimt)
+
+      common /convective/ uconv(lx1,ly1,lz1,lelv,3)
+     $              , vconv(lx1,ly1,lz1,lelv,3)
+     $              , wconv(lx1,ly1,lz1,lelv,3)
+     $              , tconv(lx1,ly1,lz1,lelt,3)
+     $              , ugz(lx1,ly1,lz1,lelv,3)
+     $              , vgz(lx1,ly1,lz1,lelv,3)
+     $              , wgz(lx1,ly1,lz1,lelv,3)
+     $              , tgz(lx1,ly1,lz1,lelt,3)
+
+      integer ix,iy,iz,iside,eg,e,id_face
+      e = gllel(eg)
+      
+      id_face = bc(5,iside,e,1)
+      if (id_face.eq.1) then ! INLET 
+      ux   = uin(ix,iy,iz,e)
+      uy   = vin(ix,iy,iz,e)
+      uz   = win(ix,iy,iz,e)
+      temp = 0.0
+      endif
+
+      if (id_face.eq.2) then ! OUTLET
+      ux   = uconv(ix,iy,iz,e,1)
+      uy   = vconv(ix,iy,iz,e,1)
+      uz   = wconv(ix,iy,iz,e,1)
+      temp = tconv(ix,iy,iz,e,1)
+      endif
+
+C      if(iffield(ifield-1)) temp = tin(ix,iy,iz,e,ifield-1)
+      flux = 0.0
+
+c define heat flux on at a section of this tube.
+      flux_at = 61740.0
+      zz_hot_low = 0.001*6.0
+      zz_hot_high = zz_hot_low + 0.001*30.0
+
+      ifc = iside
+      iel  = e
+      id_face = bc(5,ifc,iel,1)	  
+      if((id_face.eq.3).and.(ifield.eq.2)) then
+         zz_fc = f_center(3,ifc,iel)
+         if((zz_fc.gt.zz_hot_low).and.(zz_fc.lt.zz_hot_high)) then
+          flux = flux_at
+         endif 
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine useric(ix,iy,iz,eg) ! set up initial conditions
+
+c      implicit none
+
+      integer ix,iy,iz,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer idum
+      save    idum 
+      data    idum / 0 /
+
+      real*8 u_targ,diameter,radius
+
+      if (idum.eq.0) idum = 99 + nid
+   
+      u_targ = 0.445392
+      diameter = 0.001
+      radius = diameter/2.0	  
+      r = sqrt(x*x + y*y)/radius
+
+c     blunt profile w/ random perturbations
+      eps = 0.1*u_targ
+      ux  = eps*(ran1(idum)-.5)
+      uy  = eps*(ran1(idum)-.5)
+      uz  = 1.25*(1-r**8.0)*u_targ + eps*(ran1(idum)-.5)
+
+      temp = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userchk()
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+      integer ssID
+	  
+c      common /myoutflow/ d(lx1,ly1,lz1,lelt),m1(lx1*ly1*lz1,lelt)
+c      real m1
+
+      real dx,dy,dz,ubar
+      real*8 dmdt,dhdt
+      ntot = nx1*ny1*nz1*nelv
+
+c      rq = 2.0
+c      uin = 0.0
+c      call turb_outflow(d,m1,rq,uin)
+
+      dx = 0.0
+      dy = 0.0
+      dz = 0.005
+      ubar = 0.445392
+
+      call set_inflow_fpt(dx,dy,dz,ubar) ! set recycling velocity
+	  
+      ssID = 2 
+      call checkCO2Prop(dmdt,dhdt) ! print max/min co2 properties.
+      call calConvective(ssID,dmdt,dhdt) ! calculate convective outlet bc
+	  
+      call avg_all_co2()
+      call avg_all_turb()
+	  
+	  
+      if((istep.gt.0).and.(mod(istep,iostep).eq.0)) then
+       call  get_wall_temp()
+      endif
+	  
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userqtl ! Set thermal divergence
+
+c      call userqtl_scig 
+      call qtl_co2()     
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat()   ! This routine to modify element vertices
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat2()  ! This routine to modify mesh coordinates
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+      common /FACE_CENT/ f_center(ldim,2*ldim,lelv)
+      real f_center
+      real AA,xarea,yarea,zarea
+
+      do iel=1,nelv
+      do ifc=1,2*ndim
+        id_face = bc(5,ifc,iel,1)
+        if (id_face.eq.1) then        ! surface 1 for inlet 
+           cbc(ifc,iel,1) = 'v  '
+           cbc(ifc,iel,2) = 't  '
+        elseif (id_face.eq.2) then    ! surface 2 for outlet
+           !cbc(ifc,iel,1) = 'O  '
+           !cbc(ifc,iel,2) = 'I  '
+           cbc(ifc,iel,1) = 'v  '
+           cbc(ifc,iel,2) = 't  '
+        elseif (id_face.eq.3) then    ! surface 3 for wall
+           cbc(ifc,iel,1) = 'W  '
+           cbc(ifc,iel,2) = 'f  '
+        endif
+      enddo
+      enddo
+
+      ntot = nx1*ny1*nz1*nelt
+ 
+      do i=1,ntot
+           xm1(i,1,1,1) = xm1(i,1,1,1)*1.0E-3
+           ym1(i,1,1,1) = ym1(i,1,1,1)*1.0E-3
+           zm1(i,1,1,1) = zm1(i,1,1,1)*1.0E-3
+      enddo
+      param(59) = 1     ! force nek5 to recognize element deformation.
+   
+      if (nid.eq.0) then 
+      write(6,*) 'geometry scale completed'	  
+      endif	
+
+c calculate surface center xyz for element faces
+c only do for surface 3, wall, now
+      call rzero(f_center,ndim*2*ndim*nelv)  
+      do iel=1,nelv
+      do ifc=1,2*ndim
+        id_face = bc(5,ifc,iel,1)
+        if (id_face.eq.3) then
+          AA = 0.0
+          xarea = 0.0
+          yarea = 0.0
+          zarea = 0.0
+          call surface_int(xarea,AA,xm1,iel,ifc)
+          call surface_int(yarea,AA,ym1,iel,ifc)
+          call surface_int(zarea,AA,zm1,iel,ifc)
+          f_center(1,ifc,iel) = xarea/AA
+          f_center(2,ifc,iel) = yarea/AA
+          f_center(3,ifc,iel) = zarea/AA
+        endif
+      enddo
+      enddo
+c
+	  
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat3()
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end

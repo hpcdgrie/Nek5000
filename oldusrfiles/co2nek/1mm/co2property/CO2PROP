@@ -1,0 +1,13 @@
+      real*8 beta_co2(lx1,ly1,lz1,lelv),
+     $ rho_co2(lx1,ly1,lz1,lelv),
+     $ visc_co2(lx1,ly1,lz1,lelv),
+     $ alpha_co2(lx1,ly1,lz1,lelv),
+     $ T_co2(lx1,ly1,lz1,lelv)
+	 
+      common /CO2PROP/ beta_co2,rho_co2,visc_co2,alpha_co2,T_co2
+	  
+      real*8 rho_avg(lx1,ly1,lz1,lelv),
+     $ T_avg(lx1,ly1,lz1,lelv)
+	 
+      common /CO2AVG/ rho_avg,T_avg
+	  

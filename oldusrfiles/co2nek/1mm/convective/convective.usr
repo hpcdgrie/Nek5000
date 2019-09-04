@@ -1,0 +1,438 @@
+c------------------------------------------------------------------------
+      subroutine calConvective(ssID,dmdt,dhdt)
+      include 'SIZE'
+      include 'TOTAL'
+
+      common /convective/ uconv(lx1,ly1,lz1,lelv,3)
+     $              , vconv(lx1,ly1,lz1,lelv,3)
+     $              , wconv(lx1,ly1,lz1,lelv,3)
+     $              , tconv(lx1,ly1,lz1,lelt,3)
+     $              , ugz(lx1,ly1,lz1,lelv,3)
+     $              , vgz(lx1,ly1,lz1,lelv,3)
+     $              , wgz(lx1,ly1,lz1,lelv,3)
+     $              , tgz(lx1,ly1,lz1,lelt,3)
+
+      integer id_face,ssID
+      real CU ! convective velocity
+      real*8 dmdt,dhdt,m_out,h_out
+	  
+      lt = nx1*ny1*nz1*nelv*3
+      ln = nx1*ny1*nz1*nelv
+	
+      if(istep.eq.0) then
+       call copy(uconv(1,1,1,1,1),vx,ln)
+       call copy(vconv(1,1,1,1,1),vy,ln)
+	   call copy(wconv(1,1,1,1,1),vz,ln)
+       call copy(tconv(1,1,1,1,1),t(1,1,1,1,1),ln)
+	   
+       call copy(uconv(1,1,1,1,2),vx,ln)
+       call copy(vconv(1,1,1,1,2),vy,ln)
+	   call copy(wconv(1,1,1,1,2),vz,ln)
+       call copy(tconv(1,1,1,1,2),t(1,1,1,1,1),ln)
+
+       call copy(uconv(1,1,1,1,3),vx,ln)
+       call copy(vconv(1,1,1,1,3),vy,ln)
+	   call copy(wconv(1,1,1,1,3),vz,ln)
+       call copy(tconv(1,1,1,1,3),t(1,1,1,1,1),ln)
+
+       call rzero(ugz,lt)
+       call rzero(vgz,lt)
+	   call rzero(wgz,lt)
+       call rzero(tgz,lt)
+      endif
+
+c calculate outlet bulk velocity CU
+      call get_outlet_bulk_velocity(vz,ssID,CU)
+c 
+      call calAndExtrapolateGrad(ssID)
+c
+      call getNewConv(ssID,CU,dmdt,dhdt)
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine get_outlet_bulk_velocity(v,ssID,CU)
+      include 'SIZE'
+      include 'TOTAL'
+      integer id_face,ssID
+      real CU
+      real v(lx1,ly1,lz1,lelv)
+      real rhov(lx1,ly1,lz1,lelv)
+      real rhohv(lx1,ly1,lz1,lelv)  
+      real AA,VAA
+      real RAA,VRAA
+      real totalArea,UA,RA,URA,HURA
+      real m_out,h_out
+      real*8 h_out_avg,rho_out,mu_out,alpha_out,beta_out,T_out
+
+      ln = nx1*ny1*nz1*nelv
+      totalArea = 0.0
+      UA = 0.0
+      RA = 0.0
+      URA =  0.0
+      HURA = 0.0
+
+      call col3(rhov,v,vtrans(1,1,1,1,1),ln) 
+      call col3(rhohv,rhov,t(1,1,1,1,1),ln)
+
+      do iel=1,nelv
+      do ifc=1,2*ndim
+          id_face = bc(5,ifc,iel,1)
+          if (id_face.eq.ssID) then
+            call surface_int(VAA,AA,v,iel,ifc)
+            totalArea = totalArea + AA
+            UA = UA + VAA
+            call surface_int(RAA,AA,vtrans(1,1,1,1,1),iel,ifc)	
+            RA = RA + RAA
+            call surface_int(VRAA,AA,rhov,iel,ifc)	
+            URA = URA + VRAA
+            call surface_int(HVRAA,AA,rhohv,iel,ifc)
+            HURA = HURA + HVRAA
+
+          endif
+      enddo
+      enddo
+	  
+      totalArea = glsum(totalArea,1)
+      UA = glsum(UA,1)
+      CU = UA/totalArea
+      if (nid.eq.0) write(6,*) 'area avg velocity at outlet:' , CU
+    
+      RA = glsum(RA,1)
+      URA = glsum(URA,1)
+      CU = URA/RA
+      if (nid.eq.0) write(6,*) 'mass avg velocity at outlet:' , CU
+	
+cc      CU = 0.600
+
+      m_out = URA
+      h_out = glsum(HURA,1)
+      h_out_avg = h_out/m_out
+
+      if (nid.eq.0) write(6,*) 'm_out at outlet:' , m_out
+      if (nid.eq.0) write(6,*) 'h_out at outlet:' , h_out
+      if (nid.eq.0) write(6,*) 'h_out_avg at outlet:' , h_out_avg
+		  
+      call properties_co2(h_out_avg,rho_out,
+     &mu_out,alpha_out,beta_out,T_out)
+ 
+      CU = m_out/(totalArea*rho_out)
+      if (nid.eq.0) write(6,*) 'bulk density at outlet:' , rho_out
+      if (nid.eq.0) write(6,*) 'bat bulk velocity at outlet:' , CU
+
+      return
+      end	  
+c-----------------------------------------------------------------------
+c-----------------------------------------------------------------------
+      subroutine get_m_out(v,ssID,m_out)
+      include 'SIZE'
+      include 'TOTAL'
+      integer id_face,ssID
+      real v(lx1,ly1,lz1,lelv)
+      real rhov(lx1,ly1,lz1,lelv)
+      real AA,VAA
+      real RAA,VRAA
+      real totalArea,UA,RA,URA,m_out
+
+      ln = nx1*ny1*nz1*nelv
+      totalArea = 0.0
+      UA = 0.0
+      RA = 0.0
+      URA =  0.0
+
+      call col3(rhov,v,vtrans(1,1,1,1,1),ln) 
+
+      do iel=1,nelv
+      do ifc=1,2*ndim
+          id_face = bc(5,ifc,iel,1)
+          if (id_face.eq.ssID) then
+            call surface_int(VRAA,AA,rhov,iel,ifc)	
+            URA = URA + VRAA
+          endif
+      enddo
+      enddo
+	  
+
+      URA = glsum(URA,1)
+      m_out = URA
+      if (nid.eq.0) write(6,*) 'm_out based on wconv:' , m_out
+	
+cc      CU = 0.600
+
+      return
+      end	  
+c-----------------------------------------------------------------------
+      subroutine get_h_out(v,h,ssID,h_out)
+      include 'SIZE'
+      include 'TOTAL'
+      integer id_face,ssID
+      real v(lx1,ly1,lz1,lelv)
+      real h(lx1,ly1,lz1,lelv)
+      real rhov(lx1,ly1,lz1,lelv)
+      real rhohv(lx1,ly1,lz1,lelv)
+      real AA,VAA
+      real RAA,VRAA
+      real totalArea,UA,RA,URA,h_out
+
+      ln = nx1*ny1*nz1*nelv
+      totalArea = 0.0
+      UA = 0.0
+      RA = 0.0
+      URA =  0.0
+
+      call col3(rhov,v,vtrans(1,1,1,1,1),ln) 
+      call col3(rhohv,rhov,h,ln) 
+
+      do iel=1,nelv
+      do ifc=1,2*ndim
+          id_face = bc(5,ifc,iel,1)
+          if (id_face.eq.ssID) then
+            call surface_int(VRAA,AA,rhohv,iel,ifc)	
+            URA = URA + VRAA
+          endif
+      enddo
+      enddo
+
+      URA = glsum(URA,1)
+      h_out = URA
+      if (nid.eq.0) write(6,*) 'h_out based on new wconv:' , h_out
+
+      return
+      end	  
+c-----------------------------------------------------------------------
+      subroutine calAndExtrapolateGrad(ssID)
+      include 'SIZE'
+      include 'TOTAL'
+      common /convective/ uconv(lx1,ly1,lz1,lelv,3)
+     $              , vconv(lx1,ly1,lz1,lelv,3)
+     $              , wconv(lx1,ly1,lz1,lelv,3)
+     $              , tconv(lx1,ly1,lz1,lelt,3)
+     $              , ugz(lx1,ly1,lz1,lelv,3)
+     $              , vgz(lx1,ly1,lz1,lelv,3)
+     $              , wgz(lx1,ly1,lz1,lelv,3)
+     $              , tgz(lx1,ly1,lz1,lelt,3)
+	  
+      real tmp1(lx1,ly1,lz1,lelv),tmp2(lx1,ly1,lz1,lelv)
+      integer id_face,ssID
+	  
+      call gradm1 (tmp1,tmp2,ugz(1,1,1,1,1),vx)
+      call gradm1 (tmp1,tmp2,vgz(1,1,1,1,1),vy)
+      call gradm1 (tmp1,tmp2,wgz(1,1,1,1,1),vz)
+      call gradm1 (tmp1,tmp2,tgz(1,1,1,1,1),t(1,1,1,1,1))
+
+c store old value
+	  
+      do iel=1,nelv
+      do ifc=1,2*ndim
+          id_face = bc(5,ifc,iel,1)
+          if (id_face.eq.ssID) then
+		  call facind(i0,i1,j0,j1,k0,k1,nx1,ny1,nz1,ifc)
+          do k=k0,k1
+          do j=j0,j1
+          do i=i0,i1
+          ugz(i,j,k,iel,3) = ugz(i,j,k,iel,2) 
+		  ugz(i,j,k,iel,2) = ugz(i,j,k,iel,1)
+
+          vgz(i,j,k,iel,3) = vgz(i,j,k,iel,2) 
+		  vgz(i,j,k,iel,2) = vgz(i,j,k,iel,1)
+
+          wgz(i,j,k,iel,3) = wgz(i,j,k,iel,2) 
+		  wgz(i,j,k,iel,2) = wgz(i,j,k,iel,1)
+
+          tgz(i,j,k,iel,3) = tgz(i,j,k,iel,2) 
+		  tgz(i,j,k,iel,2) = tgz(i,j,k,iel,1)		  
+
+          enddo
+          enddo
+          enddo		  
+          endif
+      enddo
+      enddo
+
+c extrapolate new grad
+      do iel=1,nelv
+      do ifc=1,2*ndim
+          id_face = bc(5,ifc,iel,1)
+          if (id_face.eq.ssID) then
+		  call facind(i0,i1,j0,j1,k0,k1,nx1,ny1,nz1,ifc)
+          do k=k0,k1
+          do j=j0,j1
+          do i=i0,i1
+
+          if(istep.gt.0) then
+          ugz(i,j,k,iel,1) = 2.0*ugz(i,j,k,iel,2)-ugz(i,j,k,iel,3)
+          vgz(i,j,k,iel,1) = 2.0*vgz(i,j,k,iel,2)-vgz(i,j,k,iel,3)
+          wgz(i,j,k,iel,1) = 2.0*wgz(i,j,k,iel,2)-wgz(i,j,k,iel,3)
+          tgz(i,j,k,iel,1) = 2.0*tgz(i,j,k,iel,2)-tgz(i,j,k,iel,3)
+          endif
+
+          enddo
+          enddo
+          enddo		  
+          endif
+      enddo
+      enddo
+
+      if (nid.eq.0) write(6,*) 'done extrapolate gradz' 
+	  
+      return
+      end	  
+c-----------------------------------------------------------------------
+      subroutine getNewConv(ssID,CU,dmdt,dhdt)
+      include 'SIZE'
+      include 'TOTAL'
+      common /convective/ uconv(lx1,ly1,lz1,lelv,3)
+     $              , vconv(lx1,ly1,lz1,lelv,3)
+     $              , wconv(lx1,ly1,lz1,lelv,3)
+     $              , tconv(lx1,ly1,lz1,lelt,3)
+     $              , ugz(lx1,ly1,lz1,lelv,3)
+     $              , vgz(lx1,ly1,lz1,lelv,3)
+     $              , wgz(lx1,ly1,lz1,lelv,3)
+     $              , tgz(lx1,ly1,lz1,lelt,3)
+	 
+      real*8    mscale(3)
+      save    mscale
+      data    mscale /1.0,1.0,1.0/
+	 
+      real CU,inv_dt
+      real*8 dmdt,dhdt
+      real m_in,m_out,h_in,h_out,hscale
+      integer id_face,ssID
+c store old conv
+      do iel=1,nelv
+      do ifc=1,2*ndim
+          id_face = bc(5,ifc,iel,1)
+          if (id_face.eq.ssID) then
+		  call facind(i0,i1,j0,j1,k0,k1,nx1,ny1,nz1,ifc)
+          do k=k0,k1
+          do j=j0,j1
+          do i=i0,i1
+          uconv(i,j,k,iel,3) = uconv(i,j,k,iel,2) 
+		  uconv(i,j,k,iel,2) = uconv(i,j,k,iel,1)
+
+          vconv(i,j,k,iel,3) = vconv(i,j,k,iel,2) 
+		  vconv(i,j,k,iel,2) = vconv(i,j,k,iel,1)
+
+          wconv(i,j,k,iel,3) = wconv(i,j,k,iel,2) 
+		  wconv(i,j,k,iel,2) = wconv(i,j,k,iel,1)
+
+          tconv(i,j,k,iel,3) = tconv(i,j,k,iel,2) 
+		  tconv(i,j,k,iel,2) = tconv(i,j,k,iel,1)		  
+
+          enddo
+          enddo
+          enddo		  
+          endif
+      enddo
+      enddo
+
+      inv_dt = 1.0/dt
+
+      call backDif(ssID,uconv,ugz,inv_dt,CU)
+      call backDif(ssID,vconv,vgz,inv_dt,CU)
+      call backDif(ssID,wconv,wgz,inv_dt,CU)
+      call backDif(ssID,tconv,tgz,inv_dt,CU)
+
+      if (nid.eq.0) write(6,*) 'done cal convective vel' 
+
+c adjust outlet velocity and enthalpy to maintain bulk mass/energy balance
+      call get_m_out(wconv(1,1,1,1,1),ssID,m_out)
+      radius = 1.0e-3/2.0
+      pi = 3.1415926
+      m_in = 0.445392*736.5*pi*radius*radius
+
+      mscale(3) =  mscale(2) 
+      mscale(2) =  mscale(1) 
+      mscale(1)= (m_in - dmdt)/m_out
+
+      mscale(1) = mscale(1)*0.3 +  mscale(2)*0.4 +  mscale(3)*0.3
+
+      if (nid.eq.0) write(6,*) 'mscale:',   mscale(1)
+	 
+c      if(mscale.lt.1.0) mscale = 1.0
+
+	  do iel=1,nelv
+      do ifc=1,2*ndim
+          id_face = bc(5,ifc,iel,1)
+          if (id_face.eq.ssID) then
+		  call facind(i0,i1,j0,j1,k0,k1,nx1,ny1,nz1,ifc)
+          do k=k0,k1
+          do j=j0,j1
+          do i=i0,i1
+          wconv(i,j,k,iel,1) = wconv(i,j,k,iel,1)*mscale(1)
+          enddo
+          enddo
+          enddo		  
+          endif
+      enddo
+      enddo
+
+cc in bae paper, only outlet velocity is corrected
+	  
+      call get_h_out(wconv(1,1,1,1,1),tconv(1,1,1,1,1),ssID,h_out)
+
+      h_in = 0.0
+      Qw =  61740.0 * 2.0*radius*pi*(36.0-6.0)*1.0e-3 
+      hscale = (h_in + Qw )/h_out
+      hdiff = (h_in + Qw ) - h_out
+	  
+      if (nid.eq.0) write(6,*) 'hscale:', hscale
+      if (nid.eq.0) write(6,*) 'hdiff1:', hdiff
+
+      hscale = 1.0
+      hdiff = hdiff/(m_out*mscale(1))
+      if (nid.eq.0) write(6,*) 'hdiff2:', hdiff
+	  do iel=1,nelv
+      do ifc=1,2*ndim
+          id_face = bc(5,ifc,iel,1)
+          if (id_face.eq.ssID) then
+		  call facind(i0,i1,j0,j1,k0,k1,nx1,ny1,nz1,ifc)
+          do k=k0,k1
+          do j=j0,j1
+          do i=i0,i1
+c          tconv(i,j,k,iel,1) = tconv(i,j,k,iel,1)*hscale
+c          tconv(i,j,k,iel,1) = tconv(i,j,k,iel,1) + hdiff
+          enddo
+          enddo
+          enddo		  
+          endif
+      enddo
+      enddo
+	  
+	  
+      return
+      end
+c---------------------------------------------------------------------------------
+      subroutine backDif(ssID,uconv1,ugz1,inv_dt,CU)
+      include 'SIZE'
+      include 'TOTAL'
+      real uconv1(lx1,ly1,lz1,lelv,3)
+      real ugz1(lx1,ly1,lz1,lelv,3)
+      real RIGHT,LEFT,CU,inv_dt
+      integer id_face,ssID
+
+	  do iel=1,nelv
+      do ifc=1,2*ndim
+          id_face = bc(5,ifc,iel,1)
+          if (id_face.eq.ssID) then
+		  call facind(i0,i1,j0,j1,k0,k1,nx1,ny1,nz1,ifc)
+          do k=k0,k1
+          do j=j0,j1
+          do i=i0,i1
+
+          RIGHT = - CU * ugz1(i,j,k,iel,1)
+          RIGHT = RIGHT + inv_dt *2.0* uconv1(i,j,k,iel,2)
+          RIGHT = RIGHT - inv_dt *0.5* uconv1(i,j,k,iel,3)
+          LEFT = inv_dt * 1.5
+          uconv1(i,j,k,iel,1) = RIGHT/LEFT
+
+          enddo
+          enddo
+          enddo		  
+          endif
+      enddo
+      enddo
+
+      return
+      end
+c---------------------------------------------------------------------------------	  
