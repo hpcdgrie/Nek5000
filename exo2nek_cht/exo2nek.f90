@@ -1,10 +1,130 @@
+!----------------------------------------------------------------------
+! exo2nek for CHT meshes
+! combine fluid and solid exo files into one re2 file
+! usage:
+!
+! fluid domain and solid domain should be in seperate exo files.
+! and interface mesh must be conformal, however, exo2nek does not 
+! check this. if interface mesh is not conformal, nek will report error.
+!
+! user can have multiple exo files for fluid domain and solid domain.
+! only accept hex20 element type in exo files
+!
+! input:
+! must input all fluid exo files first, then solid exo files follows
+! usr should also input interfacen sideset ID.
+! fluid1.exo
+! fluid2.exo
+! solid1.exo
+! solid2.exo
+!
+!----------------------------------------------------------------------
       program exo2nek
 
       use SIZE
 
+      character ifmore
+      logical ifmorefluid
+      logical ifmoresolid
+
+      write(6,*) 'Special exo2nek version for cht mesh'
+      write(6,*) 'please read readme how to set sideset'
+
+      write(6,*) 'please input estimate total element number:'
+      read (5,*) etot_est
+
+      ! allocate Nek5000 array
+      num_dim = 3
+      allocate ( xm1                (3,3,3,etot_est)      )
+      allocate ( ym1                (3,3,3,etot_est)      )
+      allocate ( zm1                (3,3,3,etot_est)      )
+
+      allocate   (ccurve (4+8*(num_dim-2),etot_est) )
+      allocate   (curve  (2*num_dim,12,   etot_est) )
+      call rzero (curve,2*num_dim*12*etot_est)
+      call blank (ccurve,(4+8*(num_dim-2))*etot_est)
+
+      allocate   (cbc    (2*num_dim,      etot_est) )
+      allocate   (bc     (5,2*num_dim,    etot_est) )
+      call rzero (bc,5*2*num_dim*etot_est)
+      call blank (cbc,3*2*num_dim*etot_est)
+ 
+      eacc = 0
+      ifmorefluid = .true.
+
+      do while (ifmorefluid)
+
+      write(6,*) 'please input fluid exo file:'
       call read_input_name
       call exodus_read
+
+      write(6,*) 'Input number of interface sidesets:'
+      read (5,*)  nins
+      write(6,*) 'Input interface sideset IDs (one by one  enter):'
+      allocate ( int_ss (nins))
+      do i = 1, nins
+      read (5,*)  int_ss(i)
+      enddo
       call convert
+      deallocate(int_ss)      
+
+      write(6,*) 'do you have more fluid exo file? y/n'
+      read (5,*) ifmore 
+      if(ifmore.eq.'y') then
+         ifmorefluid =.true.
+      else if(ifmore.eq.'n') then
+         ifmorefluid =.false.
+      else
+        write(6,*) 'Unknown input, abort.'
+        call exit
+      endif
+
+      enddo
+
+      eftot = eacc
+      ifmoresolid = .true.
+
+      do while (ifmoresolid)
+ 
+      write(6,*) 'please input solid exo file:'
+      call read_input_name
+      call exodus_read
+
+      write(6,*) 'Input number of interface sidesets:'
+      read (5,*)  nins
+      write(6,*) 'Input interface sideset IDs (one by one  enter):'
+      allocate ( int_ss (nins))
+      do i = 1, nins
+      read (5,*)  int_ss(i)
+      enddo
+
+      call convert
+      deallocate(int_ss)
+
+      write(6,*) 'do you have more solid exo file? y/n'
+      read (5,*) ifmore
+      if(ifmore.eq.'y') then
+         ifmoresolid =.true.
+      else if(ifmore.eq.'n') then
+         ifmoresolid =.false.
+      else
+        write(6,*) 'Unknown input, abort.'
+        exit
+      endif
+
+      enddo
+
+      etot = eacc
+      estot = etot - eftot
+
+      if(etot.gt.etot_est) then
+       write(6,*) 'ABORT'
+       write(6,*) 'please increase estimate element number to ',etot
+       call exit
+      endif 
+
+      write(6,*) 'please input combined CHT re2 file name:'
+      call read_re2_name
       call gen_re2
 
       end 
@@ -13,40 +133,51 @@
 
       use SIZE
 
-      character(1)  re2nam1(80)
+!      character(1)  re2nam1(80)
       character(1)  exonam1(32)
       character(32) fname
 
-      write(6,*) 'Special exo2nek version for cht mesh'
-      write(6,*) 'please read readme how to set sideset and bc'
-
-      write(6,*) 'Input (.exo) file name:'
       read (5,'(A32)') fname
       len = ltrunc(fname,32)
       
       call blank  (exonam1, 32)
-      call blank  (re2nam1, 80)
+!      call blank  (re2nam1, 80)
       call chcopy (exonam1,fname,32)
-      call chcopy (re2nam1,fname,80)
+!      call chcopy (re2nam1,fname,80)
       call chcopy (exonam1(len+1) ,'.exo',4)
-      call chcopy (re2nam1(len+1) ,'.re2',4)
+!      call chcopy (re2nam1(len+1) ,'.re2',4)
 
       call blank  (exoname, 32)
-      call blank  (re2name, 80)
+!      call blank  (re2name, 80)
       call chcopy (exoname,exonam1,len+4)
+!      call chcopy (re2name,re2nam1,len+4)
+ 
+      return 
+      end
+!-----------------------------------------------------------------------
+      subroutine read_re2_name
+
+      use SIZE
+
+      character(1)  re2nam1(80)
+!      character(1)  exonam1(32)
+      character(32) fname
+
+      read (5,'(A32)') fname
+      len = ltrunc(fname,32)
+      
+!      call blank  (exonam1, 32)
+      call blank  (re2nam1, 80)
+!      call chcopy (exonam1,fname,32)
+      call chcopy (re2nam1,fname,80)
+!      call chcopy (exonam1(len+1) ,'.exo',4)
+      call chcopy (re2nam1(len+1) ,'.re2',4)
+
+!      call blank  (exoname, 32)
+      call blank  (re2name, 80)
+!      call chcopy (exoname,exonam1,len+4)
       call chcopy (re2name,re2nam1,len+4)
-
-      write(6,*) 'Input number of blocks for fluid mesh: '
-      read (5,*)  nfb
-
-      write(6,*) 'Input number of interface sidesets of solid mesh:'
-      read (5,*)  nins
-      write(6,*) 'Input interface sideset IDs of solid mesh (one by one enter):'
-      allocate ( int_ss (nins))
-      do i = 1, nins
-      read (5,*)  int_ss(i)	
-      enddo
-	 
+ 
       return 
       end
 !-----------------------------------------------------------------------
@@ -65,9 +196,11 @@
       character(MXLNLN) titl
       character(1)      cdum
 
-      integer,allocatable,dimension(:) :: idblk
-      integer,allocatable,dimension(:) :: num_nodes_per_elem
-      integer,allocatable,dimension(:) :: num_attr    !not used
+!      integer,allocatable,dimension(:) :: idblk
+!      integer,allocatable,dimension(:) :: num_nodes_per_elem
+!      integer,allocatable,dimension(:) :: num_attr    !not used
+
+
 !
 ! open EXODUS II file
 !
@@ -115,10 +248,12 @@
       allocate ( x_exo              (3**num_dim*num_elem) )
       allocate ( y_exo              (3**num_dim*num_elem) )
       allocate ( z_exo              (3**num_dim*num_elem) )
-      ! Nek5000:
-      allocate ( xm1                (3,3,3,num_elem)      )
-      allocate ( ym1                (3,3,3,num_elem)      )
-      allocate ( zm1                (3,3,3,num_elem)      )
+
+!      ! Nek5000:
+!      allocate ( xm1                (3,3,3,num_elem)      )
+!      allocate ( ym1                (3,3,3,num_elem)      )
+!      allocate ( zm1                (3,3,3,num_elem)      )
+
 !
 ! read element block parameters
 !
@@ -296,6 +431,9 @@
 !
       use SIZE
       include 'exodusII.inc'
+      integer eacc_old
+      integer ssID
+      logical ifinterface
 
 ! node and face conversion (it works at least for cubit):
       integer exo_to_nek_vert3D(27)                   ! hex27 to nek numbering
@@ -313,19 +451,22 @@
       integer exo_to_nek_face2D(4)
       data    exo_to_nek_face2D  / 1, 2, 3, 4 /        ! symmetric face numbering
 
+      eacc_old = eacc
+
       write(6,'(A)') ' '
       write(6,'(A)') 'Converting elements ... '
       do iel=1,num_elem
+        eacc = eacc + 1
         do ivert =1,nvert
           if (num_dim.eq.2) then
             jvert = exo_to_nek_vert2D(ivert)
-            xm1(jvert,1,1,iel)=x_exo(connect(nvert*(iel-1)+ivert))
-            ym1(jvert,1,1,iel)=y_exo(connect(nvert*(iel-1)+ivert))
+            xm1(jvert,1,1,eacc)=x_exo(connect(nvert*(iel-1)+ivert))
+            ym1(jvert,1,1,eacc)=y_exo(connect(nvert*(iel-1)+ivert))
           else
             jvert = exo_to_nek_vert3D(ivert)
-            xm1(jvert,1,1,iel)=x_exo(connect(nvert*(iel-1)+ivert))
-            ym1(jvert,1,1,iel)=y_exo(connect(nvert*(iel-1)+ivert))
-            zm1(jvert,1,1,iel)=z_exo(connect(nvert*(iel-1)+ivert))
+            xm1(jvert,1,1,eacc)=x_exo(connect(nvert*(iel-1)+ivert))
+            ym1(jvert,1,1,eacc)=y_exo(connect(nvert*(iel-1)+ivert))
+            zm1(jvert,1,1,eacc)=z_exo(connect(nvert*(iel-1)+ivert))
           endif
         enddo
       enddo
@@ -334,19 +475,20 @@
 !
 ! allocate and zero-out curve sides arrays
 !
-      allocate   (ccurve (4+8*(num_dim-2),num_elem) )
-      allocate   (curve  (2*num_dim,12,   num_elem) )
-      call rzero (curve,2*num_dim*12*num_elem)
-      call blank (ccurve,(4+8*(num_dim-2))*num_elem)
+!      allocate   (ccurve (4+8*(num_dim-2),num_elem) )
+!      allocate   (curve  (2*num_dim,12,   num_elem) )
+!      call rzero (curve,2*num_dim*12*num_elem)
+!      call blank (ccurve,(4+8*(num_dim-2))*num_elem)
 !
 ! allocate and zero-out bc arrays only if sidesets are specified
 !
-      if (num_side_sets.eq.0) return   
+!      if (num_side_sets.eq.0) return   
 
-      allocate   (cbc    (2*num_dim,      num_elem) )
-      allocate   (bc     (5,2*num_dim,    num_elem) ) 
-      call rzero (bc,5*2*num_dim*num_elem)
-      call blank (cbc,3*2*num_dim*num_elem)
+!      allocate   (cbc    (2*num_dim,      num_elem) )
+!      allocate   (bc     (5,2*num_dim,    num_elem) ) 
+!      call rzero (bc,5*2*num_dim*num_elem)
+!      call blank (cbc,3*2*num_dim*num_elem)
+
 !
 ! set bc's
 !
@@ -355,6 +497,13 @@
       do iss=1,num_side_sets
         write(6,'(a)') ''
         write(6,'(a,i2,a)') 'Sideset ',idss(iss), ' ...'
+
+        ssID =  idss(iss)
+        ifinterface = .false.
+        do i = 1, nins
+           if(ssID.eq.int_ss(i)) ifinterface = .true.
+        enddo
+ 
         do i=1,num_sides_in_set(iss) 
           iel = elem_list(i,iss)
           ifc = side_list(i,iss)
@@ -363,12 +512,28 @@
           else
             jfc = exo_to_nek_face3D(ifc)
           endif
-          cbc(jfc,iel)   = 'EXO' ! dummy exodus bc 
-          bc (5,jfc,iel) = idss(iss)
+
+          if(ifinterface) then
+            cbc(jfc,iel+eacc_old)   = 'INT' ! dummy interface bc 
+          else
+            cbc(jfc,iel+eacc_old)   = 'EXO' ! dummy exodus bc 
+          endif
+
+          bc (5,jfc,iel+eacc_old) = idss(iss)
         enddo
+
       write(6,'(A,I2)') 'done :: Sideset ',idss(iss)
       enddo
-      deallocate(elem_list,side_list)
+
+      deallocate (elem_list,side_list)
+
+      deallocate ( idblk )
+      deallocate ( num_nodes_per_elem )
+      deallocate ( num_attr           )
+
+      deallocate ( num_elem_in_block  )
+      deallocate ( num_sides_in_set   )
+      deallocate ( idss               )
 
       write(6,'(a)') ''
       write(6,'(a)') 'done :: Converting SideSets '
@@ -404,15 +569,12 @@
 
       call byte_open(re2name,ierr)
 
-! get fluid element number
-      nfe = 0
-      do i = 1, nfb
-        nfe = nfe + num_elem_in_block(i)
-      enddo
+      num_elem = etot
+      num_dim = 3
 
 !  Write the header
       call blank   (hdr,80)    
-      write(hdr,1) num_elem, num_dim, nfe
+      write(hdr,1) num_elem, num_dim, eftot
     1 format('#v002',i9,i3,i9,' this is the hdr')
       call byte_write(hdr,20,ierr)         
       call byte_write(test,1,ierr)     ! write the endian discriminator
@@ -535,30 +697,28 @@
       character(1) chdum
       data         chdum /' '/
 
-      if (num_side_sets.eq.0) return
+!      if (num_side_sets.eq.0) return
 
-
-      write(6,*) 'fluid elements: ', nfe
-      write(6,*) 'total elements: ', num_elem	
-!      rbc = num_sides_tot
-!      call byte_write (rbc,2,ierr)
+      write(6,*) 'fluid elements: ', eftot
+      write(6,*) 'total elements: ', num_elem
 
 ! writing fluid bc to only fluid elements
       nbc   = 0
       nface = 2*num_dim
-      do iel=1,nfe
+      do iel=1,eftot
         do ifc=1,nface
-          if (cbc(ifc,iel).ne.'   ')  nbc = nbc + 1
+          if (cbc(ifc,iel).ne.'   ')  nbc = nbc + 1          
         enddo
       enddo
+
       rbc = nbc
       call byte_write (rbc,2, ierr)
       write(6,*) 'fluid boundary faces: ',nbc
 
-      do iel = 1,nfe
+      do iel = 1,eftot
         do ifc = 1,2*num_dim
           ch3 = cbc(ifc,iel)
-          if (ch3.eq.'EXO') then
+          if ((ch3.eq.'EXO').or.(ch3.eq.'INT')) then
             buf2(1)=iel
             buf2(2)=ifc
             call copy   (buf2(3),bc(1,ifc,iel),5)
@@ -572,18 +732,15 @@
           endif
         enddo
       enddo
-	  
+  
 ! writing thermal bc to all elements
       nbc   = 0
       nface = 2*num_dim
       do iel=1,num_elem
         do ifc=1,nface
           ifinterface = .false.
-          if (cbc(ifc,iel).ne.'   ')  then
-            do i = 1, nins
-			if(bc(5,ifc,iel).eq.int_ss(i)) ifinterface = .true.
-            enddo
-            if(.not.ifinterface) nbc = nbc + 1
+          if (cbc(ifc,iel).eq.'EXO')  then
+            nbc = nbc + 1
           endif
         enddo
       enddo
@@ -595,12 +752,7 @@
         do ifc = 1,2*num_dim
           ifinterface = .false.
           ch3 = cbc(ifc,iel)
-          if (ch3.eq.'EXO') then
-            do i = 1, nins
-			if(bc(5,ifc,iel).eq.int_ss(i)) ifinterface = .true.
-            enddo
-			
-            if(.not.ifinterface) then
+          if (ch3.eq.'EXO') then   
             buf2(1)=iel
             buf2(2)=ifc
             call copy   (buf2(3),bc(1,ifc,iel),5)
@@ -611,8 +763,6 @@
               buf2(3) = ibc
             endif
             call byte_write (buf2,16,ierr)
-            endif
- 
           endif
         enddo
       enddo

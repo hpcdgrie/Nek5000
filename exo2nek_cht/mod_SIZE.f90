@@ -5,6 +5,10 @@ module SIZE
 !
       character(32) exoname ! MXSTLN=32 max string length in exodus file
 
+      integer,allocatable,dimension(:) :: idblk
+      integer,allocatable,dimension(:) :: num_nodes_per_elem
+      integer,allocatable,dimension(:) :: num_attr    !not used
+
       real,save,allocatable,dimension(:) :: x_exo, y_exo, z_exo
 
       integer,save,allocatable,dimension(:)   :: num_elem_in_block, connect
@@ -14,16 +18,10 @@ module SIZE
       integer  num_side_sets, num_sides_tot
       save     num_dim, num_elem, num_elem_blk, nvert
       save     num_side_sets, num_sides_tot
-	  
-      integer  nfb   ! number of fluid blocks, should given by user input
-      save     nfb
-      integer  nfe   ! number of fluid elements
-      save     nfe
-	  
-      integer  nins   ! number of interface sidesets
-      save     nins   
-      integer,save,allocatable,dimension(:)   :: int_ss
-	  
+
+      integer  nins,etot,etot_est,eacc,eftot,estot
+      save     nins,etot,etot_est,eacc,eftot,estot
+      integer,save,allocatable,dimension(:)   :: int_ss 
 !
 !
 ! NEK CORE variables:
