@@ -1,0 +1,245 @@
+c for geneneral purpost post processing.
+c
+c
+c-----------------------------------------------------------------------
+c  nek5000 user-file template
+c
+c  user specified routines:
+c     - uservp  : variable properties
+c     - userf   : local acceleration term for fluid
+c     - userq   : local source term for scalars
+c     - userbc  : boundary conditions
+c     - useric  : initial conditions
+c     - userchk : general purpose routine for checking errors etc.
+c     - userqtl : thermal divergence for lowMach number flows 
+c     - usrdat  : modify element vertices 
+c     - usrdat2 : modify mesh coordinates
+c     - usrdat3 : general purpose routine for initialization
+c     
+c-----------------------------------------------------------------------
+      subroutine uservp(ix,iy,iz,eg) ! set variable properties
+
+c      implicit none
+
+      integer ix,iy,iz,eg
+     
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e
+c     e = gllel(eg)
+
+      udiff  = param(2)
+      utrans = param(1)
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userf(ix,iy,iz,eg) ! set acceleration term
+c
+c     Note: this is an acceleration term, NOT a force!
+c     Thus, ffx will subsequently be multiplied by rho(x,t).
+c
+c      implicit none
+
+c      common /force_filter/ ffilter(lx1,ly1,lz1,lelt),
+      common /usrforce/ usrfz
+
+      integer ix,iy,iz,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e
+      e = gllel(eg)
+
+      ffx = 0.0
+      ffy = 0.0
+      ffz = 0.0
+	   
+      zz = zm1(ix,iy,iz,e)
+	  
+      if(zz.ge.(7.5+0.24-0.02)) then
+      ffz = usrfz
+      endif
+      if(zz.le.(7.5-0.24+0.02)) then
+      ffz = usrfz
+      endif
+	  
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userq(ix,iy,iz,eg) ! set source term
+
+c      implicit none
+
+      integer ix,iy,iz,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e
+c     e = gllel(eg)
+
+      qvol   = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userbc(ix,iy,iz,iside,eg) ! set up boundary conditions
+c
+c     NOTE ::: This subroutine MAY NOT be called by every process
+c
+c      implicit none
+
+      integer ix,iy,iz,iside,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+c      if (cbc(iside,gllel(eg),ifield).eq.'v01')
+
+      ux   = 0.0
+      uy   = 0.0
+      uz   = -3.215*3.215/1.1
+      temp = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine useric(ix,iy,iz,eg) ! set up initial conditions
+
+c      implicit none
+
+      integer ix,iy,iz,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      ux   = 0.0
+      uy   = 0.0
+      uz   = -3.215*3.215/1.1
+      temp = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userchk()
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+
+
+      if(istep.eq.0) then
+      call combine_f_files()
+      call exitt()
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userqtl ! Set thermal divergence
+
+      call userqtl_scig 
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat()   ! This routine to modify element vertices
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat2()  ! This routine to modify mesh coordinates
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat3()
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c----------------------------------------------------------------------
+      subroutine combine_f_files()
+c combine f files
+c
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'AVG'
+ 
+      parameter(fldtype=4)
+      character*3 fldname(4)
+      data fldname /'avg','rms','rm2','thf'/
+
+      character*80 fldpath
+
+c merge all avg data to one data.
+
+      ntot=nx1*ny1*nz1*nelv
+
+      nrun = 4
+
+   11 format(a,i1.1,a,A3,a)
+c   12 format(a,i2.2,a)
+
+      do ifldtype = 1,fldtype
+
+       call rzero(uavg,ntot)
+       call rzero(vavg,ntot)
+       call rzero(wavg,ntot)
+       call rzero(pavg,ntot)
+       call rzero(tavg,ntot)       
+
+      do irun = 1,nrun
+
+C      if(irun.lt.10) then
+
+      write(fldpath,11) '/prod_run/run',irun,
+     & '/',fldname(ifldtype),'mus6?.f00036'
+      if(nid.eq.0) write(6,*) fldpath
+
+C      endif
+
+      call load_fld(fldpath)
+       do i=1,ntot
+        uavg(i,1,1,1) =  uavg(i,1,1,1)  +  vx(i,1,1,1)/dble(nrun)
+        vavg(i,1,1,1) =  vavg(i,1,1,1)  +  vy(i,1,1,1)/dble(nrun)
+        wavg(i,1,1,1) =  wavg(i,1,1,1)  +  vz(i,1,1,1)/dble(nrun)
+        pavg(i,1,1,1) =  pavg(i,1,1,1)  +  pr(i,1,1,1)/dble(nrun)
+        tavg(i,1,1,1,1) = tavg(i,1,1,1,1) + t(i,1,1,1,1)/dble(nrun)
+       enddo
+
+      enddo
+
+      call outpost (uavg,vavg,wavg,pavg,tavg,fldname(ifldtype))
+
+      enddo
+
+      return
+      end
+c----------------------------------------------------------------------
+
