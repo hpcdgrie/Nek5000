@@ -1,0 +1,674 @@
+c for geneneral purpost post processing.
+c
+c 1. combine_f_files
+c    for each type f file, combine f files from multiple runs to one file   
+c 
+c 2. box_vol_avg(box(3,2),field,avg,vol)
+c    box volume average
+c
+c 3. linear_line_interpolate(line(3,2),nint,field,val(nint),dfname)
+c    linear line interpolation
+c    and dump to a file
+c
+c 4. power_line_interpolate(line(3,2),npower,nint,field,val(nint),dfname)
+c    power distribution line interpolation
+c
+c-----------------------------------------------------------------------
+c  nek5000 user-file template
+c
+c  user specified routines:
+c     - uservp  : variable properties
+c     - userf   : local acceleration term for fluid
+c     - userq   : local source term for scalars
+c     - userbc  : boundary conditions
+c     - useric  : initial conditions
+c     - userchk : general purpose routine for checking errors etc.
+c     - userqtl : thermal divergence for lowMach number flows 
+c     - usrdat  : modify element vertices 
+c     - usrdat2 : modify mesh coordinates
+c     - usrdat3 : general purpose routine for initialization
+c     
+c-----------------------------------------------------------------------
+      subroutine uservp(ix,iy,iz,eg) ! set variable properties
+
+c      implicit none
+
+      integer ix,iy,iz,eg
+     
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e
+c     e = gllel(eg)
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userf(ix,iy,iz,eg) ! set acceleration term
+c
+c     Note: this is an acceleration term, NOT a force!
+c     Thus, ffx will subsequently be multiplied by rho(x,t).
+c
+c      implicit none
+
+c      common /force_filter/ ffilter(lx1,ly1,lz1,lelt),
+      common /usrforce/ usrfz
+
+      integer ix,iy,iz,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e
+      e = gllel(eg)
+
+      ffx = 0.0
+      ffy = 0.0
+      ffz = 0.0
+	  
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userq(ix,iy,iz,eg) ! set source term
+
+c      implicit none
+
+      integer ix,iy,iz,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e
+c     e = gllel(eg)
+
+      qvol   = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userbc(ix,iy,iz,iside,eg) ! set up boundary conditions
+c
+c     NOTE ::: This subroutine MAY NOT be called by every process
+c
+c      implicit none
+
+      integer ix,iy,iz,iside,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+c      if (cbc(iside,gllel(eg),ifield).eq.'v01')
+
+      ux   = 0.0
+      uy   = 0.0
+      uz   = 0.0
+      temp = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine useric(ix,iy,iz,eg) ! set up initial conditions
+
+c      implicit none
+
+      integer ix,iy,iz,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      ux   = 0.0
+      uy   = 0.0
+      uz   = 0.0
+      temp = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userchk()
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'AVG'
+#     include "incompressible_turb_statistic_code/INCOMPRESSIBLE_TURB_STAT"
+
+      character*80 fldpath
+      real wavgbox(6),tavgbox(6),tkebox(6),epsbox(6)
+      real trmsbox(6)
+      
+      real box(3,2),vol,line(3,2)
+      integer nint,fileid
+
+      character*10 dfname
+
+
+c      if(istep.eq.0) then
+c      call combine_f_files()
+c      call exitt()
+c      endif
+
+c post processing mus6 case data.
+c for each fld file
+c 1. box avg
+c 2. line interpolate 
+
+c targets:
+c 1. box avg streamwise velocity 
+c 2. box avg temperature
+c 3. box avg tke/eps
+c 4. box avg trms
+c 3. line plots avg velocity in each direction
+c 4. line plots tke/eps 
+c 5. 
+
+c gather all data first.
+      ntot=nx1*ny1*nz1*nelv
+
+      fldpath = 'avgmus6?.f00001' 
+      call load_fld(fldpath)
+      call copy(uavg,vx,ntot)
+      call copy(vavg,vy,ntot)
+      call copy(wavg,vz,ntot)
+      call copy(pavg,pr,ntot)
+      call copy(tavg,t(1,1,1,1,1),ntot)
+
+      fldpath = 'rmsmus6?.f00001'
+      call load_fld(fldpath)
+      call copy(urms,vx,ntot)
+      call copy(vrms,vy,ntot)
+      call copy(wrms,vz,ntot)
+      call copy(prms,pr,ntot)
+      call copy(trms,t(1,1,1,1,1),ntot)
+
+      fldpath = 'rm2mus6?.f00001'
+      call load_fld(fldpath)
+      call copy(uvms,vx,ntot)
+      call copy(vwms,vy,ntot)
+      call copy(wums,vz,ntot)
+      call copy(tke,pr,ntot)
+      call copy(eps,t(1,1,1,1,1),ntot)
+
+      fldpath = 'thfmus6?.f00001'
+      call load_fld(fldpath)
+      call copy(uta,vx,ntot)
+      call copy(vta,vy,ntot)
+      call copy(wta,vz,ntot)
+c      call copy(tke,pr,ntot)
+c      call copy(eps,t,ntot)
+
+       do i=1,ntot
+        trms(i,1,1,1,1) =  trms(i,1,1,1,1)-tavg(i,1,1,1,1)**2.0
+       enddo
+
+c calculate box avg
+       do ibox=1,6
+          box(3,1) = 7.5-0.06*3.0
+          box(3,2) = 7.5+0.06*3.0
+
+          box(2,1) = 0.06
+          box(2,2) = 0.06*5.0
+
+          box(1,1) = dble(ibox-1)*0.06
+          box(1,2) = dble(ibox)*0.06
+          if(ibox.eq.6) box(1,2) = 0.36+1e-4 
+          
+          call box_vol_avg(box,wavg,ntot,wavgbox(ibox),vol)
+          call box_vol_avg(box,tavg,ntot,tavgbox(ibox),vol)
+          call box_vol_avg(box,tke,ntot,tkebox(ibox),vol)
+          call box_vol_avg(box,eps,ntot,epsbox(ibox),vol)
+          call box_vol_avg(box,trms,ntot,trmsbox(ibox),vol)
+       enddo
+
+c output box avg values to a file
+  300 format(I5,',',F14.10,',',F14.10,',',
+     & F14.10,',',F14.10,',',F14.10)
+
+      fileid = 400
+      if(nid.eq.0) then
+        open(unit=fileid,file="boxavgfile.txt")
+        write(fileid,'(A)') 'ibox,wavg,tavg,tke,eps,trms'
+        do ibox = 1,6
+        write(fileid,300) ibox,wavgbox(ibox),tavgbox(ibox)
+     &, tkebox(ibox),epsbox(ibox),trmsbox(ibox)
+        enddo
+        close(fileid)
+      endif
+
+c interpolation on lines
+c line 1,from (0,0.18,7.5) to (0.36,0.18,7.5)
+c line 2,from (0.18,0.0,7.5) to (0.18,0.36,7.5)
+c line 3, from (0.33,0.0,7.5) to (0.33,0.36,7.5)
+c line 4, from (0.345,0.0,7.5) to (0.345,0.36,7.5)
+
+      nint = 500      
+
+c line 1
+      line(1,1) = 0.0
+      line(2,1) = 0.18
+      line(3,1) = 7.5
+
+      line(1,2) = 0.36+1e-4
+      line(2,2) = 0.18
+      line(3,2) = 7.5
+
+      dfname = 'uavgl1.txt'
+      call linear_line_interpolate(line,nint,uavg,ntot,dfname)
+      dfname = 'vavgl1.txt'
+      call linear_line_interpolate(line,nint,vavg,ntot,dfname)
+      dfname = 'wavgl1.txt'
+      call linear_line_interpolate(line,nint,wavg,ntot,dfname)
+      dfname = 'tavgl1.txt'
+      call linear_line_interpolate(line,nint,tavg,ntot,dfname)
+      dfname = 'tkel1.txt'
+      call linear_line_interpolate(line,nint,tke,ntot,dfname)
+      dfname = 'epsl1.txt'
+      call linear_line_interpolate(line,nint,eps,ntot,dfname)
+      dfname = 'trmsl1.txt'
+      call linear_line_interpolate(line,nint,trms,ntot,dfname)
+
+c line 2
+      line(1,1) = 0.18
+      line(2,1) = 0.0
+      line(3,1) = 7.5
+    
+      line(1,2) = 0.18
+      line(2,2) = 0.36
+      line(3,2) = 7.5
+
+      dfname = 'uavgl2.txt'
+      call linear_line_interpolate(line,nint,uavg,ntot,dfname)
+      dfname = 'vavgl2.txt'
+      call linear_line_interpolate(line,nint,vavg,ntot,dfname)
+      dfname = 'wavgl2.txt'
+      call linear_line_interpolate(line,nint,wavg,ntot,dfname)
+      dfname = 'tavgl2.txt'
+      call linear_line_interpolate(line,nint,tavg,ntot,dfname)
+      dfname = 'tkel2.txt'
+      call linear_line_interpolate(line,nint,tke,ntot,dfname)
+      dfname = 'epsl2.txt'
+      call linear_line_interpolate(line,nint,eps,ntot,dfname)
+      dfname = 'trmsl2.txt'
+      call linear_line_interpolate(line,nint,trms,ntot,dfname)
+
+c line 3
+      line(1,1) = 0.33
+      line(2,1) = 0.0
+      line(3,1) = 7.5
+
+      line(1,2) = 0.33
+      line(2,2) = 0.36
+      line(3,2) = 7.5
+
+      dfname = 'uavgl3.txt'
+      call linear_line_interpolate(line,nint,uavg,ntot,dfname)
+      dfname = 'vavgl3.txt'
+      call linear_line_interpolate(line,nint,vavg,ntot,dfname)
+      dfname = 'wavgl3.txt'
+      call linear_line_interpolate(line,nint,wavg,ntot,dfname)
+      dfname = 'tavgl3.txt'
+      call linear_line_interpolate(line,nint,tavg,ntot,dfname)
+      dfname = 'tkel3.txt'
+      call linear_line_interpolate(line,nint,tke,ntot,dfname)
+      dfname = 'epsl3.txt'
+      call linear_line_interpolate(line,nint,eps,ntot,dfname)
+      dfname = 'trmsl3.txt'
+      call linear_line_interpolate(line,nint,trms,ntot,dfname)
+
+c line 4
+      line(1,1) = 0.345
+      line(2,1) = 0.0
+      line(3,1) = 7.5
+
+      line(1,2) = 0.345
+      line(2,2) = 0.36
+      line(3,2) = 7.5
+
+      dfname = 'uavgl4.txt'
+      call linear_line_interpolate(line,nint,uavg,ntot,dfname)
+      dfname = 'vavgl4.txt'
+      call linear_line_interpolate(line,nint,vavg,ntot,dfname)
+      dfname = 'wavgl4.txt'
+      call linear_line_interpolate(line,nint,wavg,ntot,dfname)
+      dfname = 'tavgl4.txt'
+      call linear_line_interpolate(line,nint,tavg,ntot,dfname)
+      dfname = 'tkel4.txt'
+      call linear_line_interpolate(line,nint,tke,ntot,dfname)
+      dfname = 'epsl4.txt'
+      call linear_line_interpolate(line,nint,eps,ntot,dfname)
+      dfname = 'trmsl4.txt'
+      call linear_line_interpolate(line,nint,trms,ntot,dfname)
+
+	  
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userqtl ! Set thermal divergence
+
+      call userqtl_scig 
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat()   ! This routine to modify element vertices
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat2()  ! This routine to modify mesh coordinates
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat3()
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c----------------------------------------------------------------------
+      subroutine combine_f_files()
+c combine f files
+c
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'AVG'
+ 
+      parameter(fldtype=4)
+      character*3 fldname(4)
+      data fldname /'avg','rms','rm2','thf'/
+
+      character*80 fldpath
+
+c merge all avg data to one data.
+
+      ntot=nx1*ny1*nz1*nelv
+
+      nrun = 4
+
+   11 format(a,i1.1,a,A3,a)
+c   12 format(a,i2.2,a)
+
+      do ifldtype = 1,fldtype
+
+       call rzero(uavg,ntot)
+       call rzero(vavg,ntot)
+       call rzero(wavg,ntot)
+       call rzero(pavg,ntot)
+       call rzero(tavg,ntot)       
+
+      do irun = 1,nrun
+
+C      if(irun.lt.10) then
+
+      write(fldpath,11) '/prod_run/run',irun,
+     & '/',fldname(ifldtype),'mus6?.f00036'
+      if(nid.eq.0) write(6,*) fldpath
+
+C      endif
+
+      call load_fld(fldpath)
+       do i=1,ntot
+        uavg(i,1,1,1) =  uavg(i,1,1,1)  +  vx(i,1,1,1)/dble(nrun)
+        vavg(i,1,1,1) =  vavg(i,1,1,1)  +  vy(i,1,1,1)/dble(nrun)
+        wavg(i,1,1,1) =  wavg(i,1,1,1)  +  vz(i,1,1,1)/dble(nrun)
+        pavg(i,1,1,1) =  pavg(i,1,1,1)  +  pr(i,1,1,1)/dble(nrun)
+        tavg(i,1,1,1,1) = tavg(i,1,1,1,1) + t(i,1,1,1,1)/dble(nrun)
+       enddo
+
+      enddo
+
+      call outpost (uavg,vavg,wavg,pavg,tavg,fldname(ifldtype))
+
+      enddo
+
+      return
+      end
+c----------------------------------------------------------------------
+      subroutine box_vol_avg(box,field,n,avg,vol)
+c     box volumetric average
+c     box edges are required to align with xyz axis
+c     inputs: 
+c              box(1,1): -x
+c              box(2,1): -y
+c              box(3,1): -z
+c
+c              box(1,2): +x
+c              box(2,2): +y
+c              box(3,2): +z
+c 
+c              field(n): field name
+c              n: local total GLL points
+c     outputs:
+c              avg: volumetric average value
+c              vol: actual volume from integration
+c	  
+c      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+
+      real box(3,2)
+      real avg,vol,xx,yy,zz
+      real field(n),flag(n),vflag(n)
+      integer invol
+
+      do i = 1,n
+       flag(i) = 0.0
+       vflag(i) = 0.0
+       invol = 1
+
+       xx = xm1(i,1,1,1)
+       yy = ym1(i,1,1,1)
+       zz = zm1(i,1,1,1)
+
+       if ((xx.gt.box(1,2)).or.(xx.lt.box(1,1))) then
+        invol = 0
+       endif
+
+       if ((yy.gt.box(2,2)).or.(yy.lt.box(2,1))) then
+        invol = 0
+       endif
+	   
+       if ((zz.gt.box(3,2)).or.(zz.lt.box(3,1))) then
+        invol = 0
+       endif
+
+       if(invol.eq.1) then
+        flag(i) = 1.0
+        vflag(i) = field(i)
+       endif
+
+      enddo
+
+      vol = glsc2(flag,bm1,n)
+      avg = glsc2(vflag,bm1,n)/vol
+
+      return
+      end
+c----------------------------------------------------------------------
+      subroutine linear_line_interpolate(line,nint,field,n,dfname)
+c     linear line interpolation     
+c     inputs: 
+c             line(1,1): 
+c             line(2,1):
+c             line(3,1):
+c        
+c             line(1,2):
+c             line(2,2):
+c             line(3,2):
+c
+c             nint: number of interpolation points
+c
+c              field(n): field name
+c              n: local total GLL points
+c            
+c     outputs:
+c              val: array of interpolated values
+c              dfname: dump file name
+c
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+      parameter(nint_max=1000)
+
+      real line(3,2)
+      integer nint,fileid
+      real field(n)
+      real val(nint_max)	  
+      integer n_interp ! interpolation points in local mpi rank
+      real xyz(3,nint_max)
+      character*1 dfname(1),BLNK
+      character*1 fout(132) 
+      character*132 fout2
+      DATA BLNK/' '/
+      
+	  equivalence(fout2,fout)
+      
+      L1=0
+	  DO 100 I=1,132
+         IF (dfname(I).EQ.BLNK) GOTO 200
+         L1=I
+  100 CONTINUE
+  200 CONTINUE
+      LEN=L1
+
+	  call chcopy (fout(1),dfname,LEN)
+	  
+	  
+      if(nint.gt.nint_max) then
+      if(nid.eq.0) write(6,*) 'PLEASE increase 
+     & nint_max in linear_line_interpolate(), and recompile'
+      endif
+
+      n_interp =0
+
+c only distribute interpolation points at nid = 0
+c
+      if(nid.eq.0) then
+        n_interp = nint
+        do ip =1,nint
+          xyz(1,ip) =  line(1,1)
+     & +(line(1,2)-line(1,1))*(dble(ip-1)/dble(nint-1))
+          xyz(2,ip) =  line(2,1)
+     & +(line(2,2)-line(2,1))*(dble(ip-1)/dble(nint-1))
+          xyz(3,ip) =  line(3,1)
+     & +(line(3,2)-line(3,1))*(dble(ip-1)/dble(nint-1))
+        enddo  
+      endif
+
+      call interp_usr(val,xyz,n_interp,field)
+
+c dump to a file
+
+  999 format(I5,',',F14.10,',',F14.10,',',
+     & F14.10,',',F14.10)
+
+      fileid = 300
+      if(nid.eq.0) then
+        open(unit=fileid,file=fout2)
+        write(fileid,'(A)') 'i,x,y,z,value'
+        do ip =1,nint
+        write(fileid,999) ip,xyz(1,ip),xyz(2,ip),xyz(3,ip),
+     &  val(ip)
+        enddo
+        close(fileid)
+      endif
+  
+      return
+      end
+c----------------------------------------------------------------------
+c-----------------------------------------------------------------------
+      subroutine interp_usr(val,xyz,n,f1)
+c
+c     evaluate velocity for list of points xyz
+c
+      include 'SIZE'
+      include 'TOTAL'
+
+      parameter(INTP_NMAX=60000)
+
+      real val(n),xyz(ldim,n),uvw(ldim,n)
+      real*8 f1(lx1,ly1,lz1,lelt)
+
+      real    rwk(INTP_NMAX,ldim+1) ! r, s, t, dist2
+      integer iwk(INTP_NMAX,3)      ! code, proc, el
+      save    rwk, iwk
+
+      integer intp_h
+      save    intp_h
+
+      common /rwk_intp/ 
+     $       fwrk(lx1*ly1*lz1*lelt,ldim),
+     $       fpts(ldim*INTP_NMAX),
+     $       pts(ldim*INTP_NMAX)
+
+      integer icalld,e
+      save    icalld
+      data    icalld /0/
+
+      nxyz  = nx1*ny1*nz1
+      ntot  = nxyz*nelt
+
+      if (n.gt.INTP_NMAX) call exitti ('n > INTP_NMAX in interp_v!$',n)
+      
+      if (nelgt.ne.nelgv) call exitti
+     $   ('nelgt.ne.nelgv not yet supported in interp_v!$',nelgv)
+
+      do i=1,n				! ? not moving -> save?
+         pts(i)     = xyz(1,i)
+         pts(i + n) = xyz(2,i)
+         if (if3d) pts(i + n*2) = xyz(3,i)
+      enddo
+
+      if (icalld.eq.0) then
+        icalld = 1
+        call interp_setup(intp_h,0.0,0,nelt)
+      endif
+
+      ! pack working array
+c      call opcopy(fwrk(1,1),fwrk(1,2),fwrk(1,3),vx,vy,vz)
+      call opcopy(fwrk(1,1),fwrk(1,2),fwrk(1,3),f1,f1,f1)
+
+      call rzero(fpts,ldim*INTP_NMAX)
+      call rzero(uvw,ldim*n)
+      call rzero(val,n)
+
+      ! interpolate
+      call interp_nfld(fpts,fwrk,ndim,pts(1),pts(1+n),pts(2*n+1),
+     $                 n,iwk,rwk,INTP_NMAX,.true.,intp_h)
+
+      do i=1,n
+         uvw(1,i) = fpts(i)
+         uvw(2,i) = fpts(i + n)
+         if(if3d) uvw(3,i) = fpts(i + n*2)
+      enddo
+
+      do i=1,n
+         val(i) = uvw(1,i)
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
