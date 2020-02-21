@@ -1,0 +1,6 @@
+      parameter(lxyz=lx1*ly1*lz1,lxyze=lxyz*lelv)
+      parameter(maxCells = 21000)
+      real uvwt_OF(4,maxCells),xyz_OF(3,maxCells)
+      real uvwt_near(4,3,lxyze),dist_near(3,lxyze)
+
+      common /OFDATA/ uvwt_OF,xyz_OF,uvwt_near,dist_near

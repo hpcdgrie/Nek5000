@@ -1,0 +1,317 @@
+c Haomin Yuan, 9/5/2019
+c 
+c Read OpenFOAM RANS data for initial condition for Nek LES simulation
+c assumptions:
+c 1. OF data is in decompose fashion
+c 2. OF data in each processor folder is small, (no more than 100k cells ?)
+c 3. OF data has C field (cell center coordinates), this needs to modify OF solver
+c------------------------------------------------------------------------
+      subroutine readOF
+      include 'SIZE'
+      include 'TOTAL'
+ 
+      if(nid.eq.0) write(6,*) "reading OpenFOAM data"
+c 1. import OF data. and fillin the data array for nearest three points.
+      call importOF
+
+c 2. inverse distance interpolate
+      call inverseDistanceInterpolate
+
+c 3. dump f file. then add fluctuation to kick on turbulence
+      call dumpAndFluctuate
+
+      return
+      end
+c------------------------------------------------------------------------
+      subroutine importOF
+      include 'SIZE'
+      include 'TOTAL'
+#     include "OFdata"
+
+      character*80 UFileName
+      character*80 TFileName
+      character*80 CFileName
+
+      integer fileid
+      integer numCells
+      integer nDecomposeOF ! number of processor* folders in OpenFOAM case
+     
+      ntot  = lx1*ly1*lz1*nelv
+
+      do i = 1,ntot 
+       dist_near(1,i) = 1.0
+       dist_near(2,i) = 2.0
+       dist_near(3,i) = 3.0
+       do j = 1,3
+          do k = 1,4
+             uvwt_near(k,j,i) = 0.0
+          enddo
+       enddo
+      enddo
+
+  112  format(a,i1.1,a,i1.1)
+  113  format(a,i2.2,a,i1.1)
+  114  format(a,i1.1,a,i2.2)
+  115  format(a,i2.2,a,i2.2)
+       nDecomposeOF = 64
+       nSubFiles = 4
+
+       fileid = 299
+      do iProc = 1,nDecomposeOF
+       if(nid.eq.0) write(6,*) "reading proc ",iProc
+      do iSubFile = 1,nSubFiles
+       if(nid.eq.0) write(6,*) "reading subfile ",iSubFile
+c 1. read U,T,C files from processor folder.
+c still need a reprocessing python script to convert binray file to ascii file
+c 1.1 Read C, cell center coordinates
+       numCells = 0
+
+       if(iProc.lt.10) then
+         if(iSubFile.lt.10)then
+         write(CFileName,112) 'OFdata/proc',iProc,
+     &'/CforNek',iSubFile
+         endif
+         if(iSubFile.ge.10)then
+         write(CFileName,114) 'OFdata/proc',iProc,
+     &'/CforNek',iSubFile
+         endif
+       endif
+
+       if(iProc.ge.10) then
+         if(iSubFile.lt.10)then
+         write(CFileName,113) 'OFdata/proc',iProc,
+     &'/CforNek',iSubFile
+         endif
+         if(iSubFile.ge.10)then
+         write(CFileName,115) 'OFdata/proc',iProc,
+     &'/CforNek',iSubFile
+         endif
+       endif
+
+       open(fileid,file=CFileName) 
+       read(fileid,*,iostat=io) numCells ! read first line of file
+       do iCell= 1,numCells
+         read(fileid,*,iostat=io) xyz_OF(1,iCell)
+     &,xyz_OF(2,iCell)
+     &,xyz_OF(3,iCell)
+       enddo
+       close(fileid)
+c 1.2 Read U, 
+       fileid = fileid +1
+	   
+       if(iProc.lt.10) then
+         if(iSubFile.lt.10)then
+         write(UFileName,112) 'OFdata/proc',iProc,
+     &'/UforNek',iSubFile
+         endif
+         if(iSubFile.ge.10)then
+         write(UFileName,114) 'OFdata/proc',iProc,
+     &'/UforNek',iSubFile
+         endif
+       endif
+
+       if(iProc.ge.10) then
+         if(iSubFile.lt.10)then
+         write(UFileName,113) 'OFdata/proc',iProc,
+     &'/UforNek',iSubFile
+         endif
+         if(iSubFile.ge.10)then
+         write(UFileName,115) 'OFdata/proc',iProc,
+     &'/UforNek',iSubFile
+         endif
+       endif
+
+       open(fileid,file=UFileName) 
+       read(fileid,*,iostat=io) numCells ! read first line of file
+       do iCell= 1,numCells
+         read(fileid,*,iostat=io) uvwt_OF(1,iCell)
+     &,uvwt_OF(2,iCell)
+     &,uvwt_OF(3,iCell)
+       enddo
+       close(fileid)
+c 1.3 Read T
+       fileid = fileid +1
+
+       if(iProc.lt.10) then
+         if(iSubFile.lt.10)then
+         write(TFileName,112) 'OFdata/proc',iProc,
+     &'/TforNek',iSubFile
+         endif
+         if(iSubFile.ge.10)then
+         write(TFileName,114) 'OFdata/proc',iProc,
+     &'/TforNek',iSubFile
+         endif
+       endif
+
+       if(iProc.ge.10) then
+         if(iSubFile.lt.10)then
+         write(TFileName,113) 'OFdata/proc',iProc,
+     &'/TforNek',iSubFile
+         endif
+         if(iSubFile.ge.10)then
+         write(TFileName,115) 'OFdata/proc',iProc,
+     &'/TforNek',iSubFile
+         endif
+       endif
+       open(fileid,file=TFileName) 
+       read(fileid,*,iostat=io) numCells ! read first line of file
+       do iCell= 1,numCells
+         read(fileid,*,iostat=io) uvwt_OF(4,iCell)
+       enddo
+       close(fileid)
+       fileid = fileid + 1
+
+c 2. loop over numCells to find the nearest 3 cells
+         do i = 1,ntot  
+           xx = xm1(i,1,1,1)
+           yy = ym1(i,1,1,1)
+           zz = zm1(i,1,1,1)
+		   
+c           if(dist_near(3,i).gt.1e-4) then ! 
+
+           do iCell = 1,numCells
+              dist = sqrt((xx-xyz_OF(1,iCell))**2.0 +
+     & (yy-xyz_OF(2,iCell))**2.0 +
+     & (zz-xyz_OF(3,iCell))**2.0)
+
+              if(dist.lt.dist_near(1,i)) then
+              ! if this point is even closer then point 1.
+              ! then shift all points, and store information of this point
+              dist_near(3,i) = dist_near(2,i)  
+              dist_near(2,i) = dist_near(1,i)  
+              dist_near(1,i) = dist
+
+              j = 3
+               do k = 1,4
+               uvwt_near(k,j,i) = uvwt_near(k,j-1,i)
+               enddo
+
+              j = 2
+               do k = 1,4
+               uvwt_near(k,j,i) = uvwt_near(k,j-1,i)
+               enddo
+
+              do k = 1,4
+               uvwt_near(k,1,i) = uvwt_OF(k,iCell)
+              enddo
+				 
+              else if((dist.gt.dist_near(1,i))
+     & .and.(dist.lt.dist_near(2,i))) then
+              ! if this point is btween point 1 and point 2
+              dist_near(3,i) = dist_near(2,i)  
+              dist_near(2,i) = dist
+	         
+               j = 3
+               do k = 1,4
+               uvwt_near(k,j,i) = uvwt_near(k,j-1,i)
+               enddo
+
+              do k = 1,4
+               uvwt_near(k,2,i) = uvwt_OF(k,iCell)
+              enddo
+	 
+              else if((dist.gt.dist_near(2,i))
+     & .and.(dist.lt.dist_near(3,i))) then
+              ! if this point is btween point 2 and point 3
+              dist_near(3,i) = dist
+
+              do k = 1,4
+               uvwt_near(k,3,i) = uvwt_OF(k,iCell)
+              enddo
+	 
+              endif
+	 
+           enddo
+c         endif  !if(dist_near(3,i).gt.1e-4) then
+         enddo
+      enddo  !  do iSubFile = 1,nSubFiles
+      enddo  ! do iProc = 1,nDecomposeOF
+
+      return
+      end
+c------------------------------------------------------------------------
+      subroutine inverseDistanceInterpolate
+      include 'SIZE'
+      include 'TOTAL'
+#     include "OFdata"
+
+      real w(3),wt
+      real pp
+
+      ntot  = lx1*ly1*lz1*nelv
+
+      if(nid.eq.0) write(6,*) "inverse distance interpolate"
+
+c assume uvwt_near(4,3,lxyze),dist_near(3,lxyze) are all filled in with 
+c nearest 3 points data. 
+ 
+      pp = 2  ! power parameter in Shepart inverse distance weighted interpolation
+
+      do i = 1,ntot  
+        if(dist_near(1,i).le.1e-8) then
+        ! if the first nearest data is very close to this GLL point. direct mappint its data.
+         vx(i,1,1,1) = uvwt_near(1,1,i)
+         vy(i,1,1,1) = uvwt_near(2,1,i)
+         vz(i,1,1,1) = uvwt_near(3,1,i)
+         if(IFHEAT) t(i,1,1,1,1) = uvwt_near(4,1,i)
+        else
+        ! using Sheperd inverse distance weighted interpolation
+          do j = 1,3
+            w(j) = 1.0/dist_near(j,i)**pp
+          enddo
+           wt = w(1)+w(2)+w(3)
+          do j = 1,3
+            w(j) = w(j)/wt
+          enddo
+
+          vx(i,1,1,1) = 0.0
+          vy(i,1,1,1) = 0.0
+          vz(i,1,1,1) = 0.0
+          if(IFHEAT) t(i,1,1,1,1)  = 0.0
+		  
+          do j = 1,3
+          vx(i,1,1,1) = vx(i,1,1,1) + w(j)*uvwt_near(1,j,i)
+          vy(i,1,1,1) = vy(i,1,1,1) + w(j)*uvwt_near(2,j,i)
+          vz(i,1,1,1) = vz(i,1,1,1) + w(j)*uvwt_near(3,j,i)
+          if(IFHEAT) t(i,1,1,1,1)  = t(i,1,1,1,1) 
+     & + w(j)*uvwt_near(4,j,i)
+          enddo
+        endif
+
+      enddo
+	  
+
+      return
+      end
+c------------------------------------------------------------------------
+      subroutine dumpAndFluctuate
+c
+c
+      include 'SIZE'
+      include 'TOTAL'
+      integer idum
+      save    idum 
+      data    idum / 0 /
+
+      real veps,teps
+	 
+      ntot  = lx1*ly1*lz1*nelv
+
+      call outpost2(vx,vy,vz,pr,t(1,1,1,1,1),ldimt,'ofm')
+   
+      veps = 0.5 ! m/s
+      teps = 10  ! C
+
+c      if (idum.eq.0) idum = 99 + nid
+c
+c      do i = 1,ntot 
+c        vx(i,1,1,1) = vx(i,1,1,1) + veps*(ran1(idum)-.5)
+c        vy(i,1,1,1) = vy(i,1,1,1) + veps*(ran1(idum)-.5)
+c        vz(i,1,1,1) = vz(i,1,1,1) + veps*(ran1(idum)-.5)
+c        if(IFHEAT) t(i,1,1,1,1)  = t(i,1,1,1,1) 
+c     & + teps*(ran1(idum)-.5)
+c      enddo      
+
+      return
+      end
+c------------------------------------------------------------------------
